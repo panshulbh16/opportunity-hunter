@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --animate-rise: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade: fade 0.3s ease both;
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+html { scroll-behavior: smooth; }
+body { @apply bg-white text-zinc-900 antialiased; font-feature-settings: "cv11", "ss01"; }
+
+.btn, .btn-primary, .btn-accent, .btn-secondary, .btn-ghost, .btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 h-10 text-sm font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap cursor-pointer;
+}
+.btn-primary { @apply bg-zinc-900 text-white hover:bg-zinc-700 active:scale-[0.98]; }
+.btn-accent { @apply bg-indigo-600 text-white hover:bg-indigo-700 active:scale-[0.98]; }
+.btn-secondary { @apply bg-white text-zinc-800 border border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300; }
+.btn-ghost { @apply text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900; }
+.btn-danger { @apply text-red-600 hover:bg-red-50; }
+.btn-sm { @apply h-8 px-3 text-[13px] rounded-md; }
+
+.input { @apply w-full rounded-lg border border-zinc-200 bg-white px-3 h-10 text-sm text-zinc-900 placeholder:text-zinc-400 transition-colors focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20; }
+textarea.input { @apply h-auto py-2.5 leading-relaxed; }
+select.input {
+  @apply appearance-none bg-no-repeat pr-9;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'><path d='m6 9 6 6 6-6'/></svg>");
+  background-position: right 0.6rem center;
+}
+.label { @apply block text-[13px] font-medium text-zinc-700 mb-1.5; }
+.hint { @apply text-xs text-zinc-500 mt-1.5; }
+
+.card { @apply rounded-xl border border-zinc-200 bg-white; }
+.chip { @apply inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700; }
+.check-row { @apply flex items-center gap-3 rounded-lg border border-zinc-200 px-3.5 py-3 text-sm cursor-pointer transition-colors hover:bg-zinc-50 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50/40; }
+.check-row input { @apply h-4 w-4 accent-indigo-600; }
+
+.skeleton { @apply animate-pulse rounded-md bg-zinc-100; }
+.fade-in { animation: var(--animate-fade); }
+.rise-in { animation: var(--animate-rise); }

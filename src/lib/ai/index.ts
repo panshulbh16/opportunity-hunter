@@ -1,0 +1,504 @@
+// Opportunity Hunter AI layer. Deterministic, explainable rule-based matching.
+// ponytail: no LLM dependency; every function here is a seam where a model call can replace the heuristic
+// (e.g. generateMatchExplanation → prompt an LLM with the breakdown) without touching callers.
+
+import type { RawOpportunity, SearchQuery } from "../sources/types";
+
+// ---------- Types ----------
+
+export type Profile = {
+  roles: string[];
+  skills: string[];
+  keywords: string[];
+  industries: string[];
+  companies: string[];
+  excluded_companies: string[];
+  excluded_keywords: string[];
+  years_experience: number;
+  current_role: string;
+  education: string;
+  seniority: string;
+  locations: string[];
+  remote_preference: string[]; // remote | hybrid | onsite
+  salary_min: number | null;
+  salary_max: number | null;
+  currency: string;
+  salary_period: string; // year | month
+  employment_types: string[]; // full-time | part-time | contract | internship
+  preferences: string[]; // visa_sponsorship | relocation_support | remote_only | startup | product_company
+  notification_threshold: number;
+  search_frequency: string; // daily | twice_daily | weekly
+};
+
+export type NormalizedOpportunity = {
+  category: "job";
+  title: string;
+  company: string;
+  location: string;
+  country: string;
+  remote_type: "remote" | "hybrid" | "onsite";
+  salary_min: number | null;
+  salary_max: number | null;
+  currency: string | null;
+  salary_period: string;
+  description: string;
+  skills: string[];
+  nice_to_have: string[];
+  min_years: number;
+  seniority: string;
+  employment_type: string;
+  company_type: string;
+  industry: string;
+  visa_sponsorship: number;
+  source: string;
+  source_url: string;
+  application_url: string;
+  posted_date: string;
+  canonical_url: string;
+  dedupe_key: string;
+};
+
+export type Opportunity = NormalizedOpportunity & { id: number; is_demo: number; created_at: string };
+
+export type Breakdown = {
+  score: number;
+  skills_score: number;
+  role_score: number;
+  experience_score: number;
+  location_score: number;
+  salary_score: number;
+  excluded: boolean;
+  matchedSkills: string[];
+  missingSkills: string[];
+  missingNice: string[];
+  matchedRole: string | null;
+  typeMismatch: boolean;
+};
+
+export type Explanation = {
+  strengths: string[];
+  gaps: string[];
+  difficulty: "low" | "medium" | "high";
+  difficultyReason: string;
+};
+
+export type NextAction = { action: "apply" | "consider" | "skip"; label: string; reason: string };
+
+// ---------- Vocab ----------
+
+export const KNOWN_SKILLS = [
+  "Python", "Java", "Go", "Rust", "TypeScript", "JavaScript", "C++", "React", "Next.js", "Node.js", "Django", "Flask",
+  "FastAPI", "SQL", "PostgreSQL", "MySQL", "Redis", "MongoDB", "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform",
+  "Spark", "Airflow", "Kafka", "PyTorch", "TensorFlow", "Scikit-learn", "Pandas", "NLP", "Computer Vision", "LLM", "RAG",
+  "Vector Databases", "LangChain", "MLOps", "MLflow", "Prompt Engineering", "Transformers", "Machine Learning",
+  "Deep Learning", "GraphQL", "REST APIs", "gRPC", "Linux", "CI/CD", "Jenkins", "Product Management", "System Design",
+  "Distributed Systems", "CUDA", "OpenCV", "Recommender Systems", "Spring Boot", "OpenAI API", "Anthropic API",
+];
+
+const SKILL_SYNONYMS: Record<string, string> = {
+  ai: "machine learning", "artificial intelligence": "machine learning", ml: "machine learning", "gen ai": "llm",
+  genai: "llm", "generative ai": "llm", llms: "llm", "large language models": "llm", "vector database": "vector databases",
+  "vector db": "vector databases", vectordb: "vector databases", k8s: "kubernetes", postgres: "postgresql",
+  js: "javascript", ts: "typescript", node: "node.js", nodejs: "node.js", reactjs: "react",
+  "retrieval augmented generation": "rag", "retrieval-augmented generation": "rag", "amazon web services": "aws",
+  "google cloud": "gcp", "scikit learn": "scikit-learn", sklearn: "scikit-learn", cv: "computer vision",
+};
+
+const SENIORITY_RANK: Record<string, number> = { intern: 0, junior: 1, mid: 2, senior: 3, lead: 4, manager: 5, director: 6 };
+
+const CURRENCY_TO_INR: Record<string, number> = { INR: 1, USD: 84, EUR: 91, GBP: 106, SGD: 62, AED: 23, CAD: 61, AUD: 55 };
+
+const CURRENCY_SYMBOL: Record<string, string> = { INR: "₹", USD: "$", EUR: "€", GBP: "£", SGD: "S$", AED: "AED ", CAD: "C$", AUD: "A$" };
+
+// ---------- Helpers ----------
+
+export const normSkill = (s: string) => {
+  const k = s.trim().toLowerCase();
+  return SKILL_SYNONYMS[k] ?? k;
+};
+
+const normText = (s: string) => s.toLowerCase().replace(/[^a-z0-9+#.\s]/g, " ").replace(/\s+/g, " ").trim();
+
+const ROLE_PHRASES: [RegExp, string][] = [
+  [/machine[\s-]*learning/g, "ml"], [/artificial intelligence/g, "ml"], [/\bgen(erative)?[\s-]*ai\b/g, "ml"],
+  [/\bai\b/g, "ml"], [/large language models?/g, "llm"],
+];
+const ROLE_STOP = new Set(["engineer", "developer", "programmer", "dev", "senior", "junior", "staff", "principal", "lead",
+  "sr", "jr", "the", "of", "and", "for", "a", "an", "remote", "hybrid", "onsite", "i", "ii", "iii", "iv", "engineering"]);
+
+function roleTokens(s: string) {
+  let t = normText(s.replace(/\(.*?\)/g, ""));
+  for (const [re, rep] of ROLE_PHRASES) t = t.replace(re, rep);
+  return new Set(t.split(" ").filter((w) => w && !ROLE_STOP.has(w)));
+}
+
+function roleFamily(s: string): "management" | "engineering" | "other" {
+  const t = s.toLowerCase();
+  if (/\b(manager|director|head of|vp|vice president|chief)\b/.test(t)) return "management";
+  if (/\b(engineer|developer|programmer|scientist|architect|researcher|dev)\b/.test(t)) return "engineering";
+  return "other";
+}
+
+const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, Math.round(n)));
+
+export function toAnnualINR(amount: number, currency: string | null, period: string) {
+  const rate = CURRENCY_TO_INR[currency ?? "INR"] ?? 1;
+  return amount * rate * (period === "month" ? 12 : 1);
+}
+
+export function formatSalary(o: { salary_min: number | null; salary_max: number | null; currency: string | null; salary_period: string }) {
+  if (o.salary_min == null && o.salary_max == null) return "Not disclosed";
+  const cur = o.currency ?? "INR";
+  const sym = CURRENCY_SYMBOL[cur] ?? `${cur} `;
+  const fmt = (n: number) => {
+    if (cur === "INR") return o.salary_period === "month" ? `${(n / 1e5).toFixed(n % 1e5 ? 1 : 0)}L` : `${(n / 1e5).toFixed(n % 1e5 ? 1 : 0)}`;
+    return n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`;
+  };
+  const range = [o.salary_min, o.salary_max].filter((n): n is number => n != null).map(fmt);
+  const body = range.length === 2 && range[0] === range[1] ? range[0] : range.join("–");
+  if (cur === "INR") return o.salary_period === "month" ? `${sym}${body}/month` : `${sym}${body} LPA`;
+  return `${sym}${body}${o.salary_period === "month" ? "/month" : ""}`;
+}
+
+/** Parses strings like "₹25–35 LPA", "$90k–130k", "€85k–105k", "S$1500/month", "₹1.5–2L/month". */
+export function parseSalary(s: string | null | undefined) {
+  const empty = { salary_min: null, salary_max: null, currency: null as string | null, salary_period: "year" };
+  if (!s) return empty;
+  const text = s.replace(/,/g, "").trim();
+  const currency = /S\$/.test(text) ? "SGD" : /₹|inr|lpa|lakh/i.test(text) ? "INR" : /€|eur/i.test(text) ? "EUR"
+    : /£|gbp/i.test(text) ? "GBP" : /\$|usd/i.test(text) ? "USD" : "INR";
+  const period = /month|\/mo\b|pm\b/i.test(text) ? "month" : "year";
+  const parts = [...text.matchAll(/(\d+(?:\.\d+)?)\s*(k|l|lpa|lakh|lakhs)?/gi)];
+  const sharedUnit = parts.map((m) => (m[2] ?? "").toLowerCase()).find(Boolean) ?? "";
+  const nums = parts.map((m) => {
+    const n = parseFloat(m[1]);
+    const unit = (m[2] ?? "").toLowerCase() || sharedUnit;
+    if (unit === "k") return n * 1000;
+    if (unit.startsWith("l")) return n * 1e5;
+    if (currency === "INR" && period === "year" && n < 1000) return n * 1e5; // bare "25–35 LPA"
+    return n;
+  });
+  if (!nums.length) return empty;
+  return { salary_min: nums[0], salary_max: nums[1] ?? nums[0], currency, salary_period: period };
+}
+
+export function canonicalUrl(url: string) {
+  try {
+    const u = new URL(url);
+    for (const k of [...u.searchParams.keys()]) if (/^(utm_|ref|source|fbclid|gclid)/i.test(k)) u.searchParams.delete(k);
+    u.hash = "";
+    u.hostname = u.hostname.toLowerCase();
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return url.trim();
+  }
+}
+
+export function dedupeKey(company: string, title: string, location: string) {
+  const t = normText(title.replace(/\(.*?\)/g, "")).replace(/\b(remote|hybrid|onsite|on-site)\b/g, "").trim();
+  return `${normText(company)}|${t}|${normText(location)}`;
+}
+
+// ---------- Services ----------
+
+/** Turn a free-text wish ("remote Python/AI jobs in India, 4 years, ₹20 LPA, product companies") into profile fields. */
+export function parseSearchProfile(text: string): Partial<Profile> {
+  const t = text.toLowerCase();
+  const p: Partial<Profile> = {};
+  const skills = KNOWN_SKILLS.filter((s) => new RegExp(`(^|[^a-z0-9])${s.toLowerCase().replace(/[.+]/g, "\\$&")}([^a-z0-9]|$)`).test(t));
+  if (/\bai\b/.test(t) && !skills.includes("Machine Learning")) skills.push("AI");
+  if (skills.length) p.skills = skills;
+
+  const roles: string[] = [];
+  if (/\b(ai|ml|machine learning)\b/.test(t)) roles.push("AI Engineer", "Machine Learning Engineer");
+  if (/\bpython\b/.test(t)) roles.push("Python Developer");
+  if (/\bbackend\b/.test(t)) roles.push("Backend Engineer");
+  if (/\bfrontend\b/.test(t)) roles.push("Frontend Engineer");
+  if (/\bdata (scientist|science)\b/.test(t)) roles.push("Data Scientist");
+  if (/\bdata engineer/.test(t)) roles.push("Data Engineer");
+  if (/\bfull[\s-]?stack\b/.test(t)) roles.push("Full Stack Engineer");
+  if (/\bdevops\b/.test(t)) roles.push("DevOps Engineer");
+  if (roles.length) p.roles = [...new Set(roles)];
+
+  const yrs = t.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs|yoe)/);
+  if (yrs) {
+    p.years_experience = parseFloat(yrs[1]);
+    p.seniority = p.years_experience < 1 ? "junior" : p.years_experience < 3 ? "junior" : p.years_experience < 6 ? "mid" : p.years_experience < 9 ? "senior" : "lead";
+  }
+  if (/\bsenior\b/.test(t)) p.seniority = "senior";
+
+  const sal = t.match(/(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)\s*(lpa|lakhs?|l\b)/) ?? t.match(/\$\s*(\d+)\s*k/);
+  if (sal) {
+    const n = parseFloat(sal[1]);
+    if (/\$/.test(sal[0])) { p.salary_min = n * 1000; p.currency = "USD"; } else { p.salary_min = n * 1e5; p.currency = "INR"; }
+  }
+
+  const remote: string[] = [];
+  if (/\bremote\b/.test(t)) remote.push("remote");
+  if (/\bhybrid\b/.test(t)) remote.push("hybrid");
+  if (/\b(on-?site|office)\b/.test(t)) remote.push("onsite");
+  if (remote.length) p.remote_preference = remote;
+
+  const locs: string[] = [];
+  for (const c of ["India", "Singapore", "Germany", "United Kingdom", "United States", "Canada", "Australia", "UAE"])
+    if (t.includes(c.toLowerCase())) locs.push(c);
+  for (const c of ["Bengaluru", "Bangalore", "Hyderabad", "Pune", "Mumbai", "Chennai", "Delhi", "Gurgaon", "Noida", "Berlin", "London", "San Francisco"])
+    if (t.includes(c.toLowerCase())) locs.push(`${c === "Bangalore" ? "Bengaluru" : c}, ${["Berlin"].includes(c) ? "Germany" : ["London"].includes(c) ? "United Kingdom" : c === "San Francisco" ? "United States" : "India"}`);
+  if (/\b(global(ly)?|worldwide|anywhere|international(ly)?)\b/.test(t)) locs.push("Global");
+  if (locs.length) p.locations = [...new Set(locs)];
+
+  const prefs: string[] = [];
+  if (/product compan/.test(t)) prefs.push("product_company");
+  if (/\bstartups?\b/.test(t)) prefs.push("startup");
+  if (/\bvisa\b|sponsorship/.test(t)) prefs.push("visa_sponsorship");
+  if (/remote[\s-]only/.test(t)) prefs.push("remote_only");
+  if (prefs.length) p.preferences = prefs;
+
+  const types: string[] = [];
+  if (/\bcontract\b|freelance/.test(t)) types.push("contract");
+  if (/\bintern(ship)?\b/.test(t)) types.push("internship");
+  if (/part[\s-]time/.test(t)) types.push("part-time");
+  if (types.length) p.employment_types = [...types, "full-time"];
+  return p;
+}
+
+/** Roles × locations, capped, so a source adapter can run targeted searches. */
+export function generateSearchQueries(p: Profile): SearchQuery[] {
+  const roles = p.roles.length ? p.roles : [p.skills[0] ? `${p.skills[0]} engineer` : "software engineer"];
+  const wantsRemote = p.remote_preference.includes("remote") || p.preferences.includes("remote_only");
+  const locs = p.locations.length ? p.locations : [""];
+  const out: SearchQuery[] = [];
+  for (const r of roles.slice(0, 4)) {
+    if (wantsRemote) out.push({ q: r, remote: true });
+    for (const l of locs.slice(0, 3)) if (l && l !== "Global") out.push({ q: r, location: l });
+  }
+  for (const k of p.keywords.slice(0, 3)) out.push({ q: `${k} ${roles[0]}`.trim(), remote: wantsRemote });
+  return out.slice(0, 12);
+}
+
+/** Map a raw source record into the canonical Opportunity shape, inferring what the source didn't supply. */
+export function normalizeOpportunity(raw: RawOpportunity): NormalizedOpportunity {
+  const desc = raw.description;
+  const lower = `${raw.title} ${desc}`.toLowerCase();
+  const sal = parseSalary(raw.salary);
+  const skills = raw.skills?.length ? raw.skills : KNOWN_SKILLS.filter((s) => lower.includes(s.toLowerCase())).slice(0, 8);
+  const yearsMatch = desc.match(/(\d+)\s*\+?\s*years?/i);
+  const tl = raw.title.toLowerCase();
+  const seniority = raw.seniority ?? (/\bintern/.test(tl) ? "intern" : /\bjunior|entry/.test(tl) ? "junior" : /\bdirector|head of|vp\b/.test(tl) ? "director"
+    : /\bmanager\b/.test(tl) ? "manager" : /\bstaff|principal|lead\b/.test(tl) ? "lead" : /\bsenior|sr\.?\b/.test(tl) ? "senior" : "mid");
+  const ll = raw.location.toLowerCase();
+  const remote_type = raw.remote_type ?? (/remote/.test(ll) || /fully remote|remote-first/.test(lower) ? "remote" : /hybrid/.test(lower) ? "hybrid" : "onsite");
+  const country = raw.country ?? (raw.location.split(/[,—-]/).pop()?.trim() || "");
+  const employment_type = (raw.employment_type ?? (/\bintern/.test(tl) ? "internship" : /\bcontract\b/.test(tl) ? "contract" : /part[\s-]time/.test(tl) ? "part-time" : "full-time")).toLowerCase();
+  return {
+    category: "job",
+    title: raw.title.trim(),
+    company: raw.company.trim(),
+    location: raw.location.trim(),
+    country,
+    remote_type,
+    ...sal,
+    description: desc.trim(),
+    skills,
+    nice_to_have: raw.nice_to_have ?? [],
+    min_years: raw.min_years ?? (yearsMatch ? parseInt(yearsMatch[1]) : 0),
+    seniority,
+    employment_type,
+    company_type: raw.company_type ?? "",
+    industry: raw.industry ?? "",
+    visa_sponsorship: raw.visa_sponsorship ? 1 : 0,
+    source: raw.source_name,
+    source_url: raw.source_url,
+    application_url: raw.application_url,
+    posted_date: raw.posted_date,
+    canonical_url: canonicalUrl(raw.source_url),
+    dedupe_key: dedupeKey(raw.company, raw.title, raw.location),
+  };
+}
+
+/** Collapse listings that share a canonical URL or (company, normalized title, location). Earliest posting wins. */
+export function deduplicateOpportunities<T extends { canonical_url: string; dedupe_key: string; posted_date: string }>(list: T[]): T[] {
+  const sorted = [...list].sort((a, b) => a.posted_date.localeCompare(b.posted_date));
+  const seen = new Set<string>();
+  return sorted.filter((o) => {
+    if (seen.has(o.canonical_url) || seen.has(o.dedupe_key)) return false;
+    seen.add(o.canonical_url);
+    seen.add(o.dedupe_key);
+    return true;
+  });
+}
+
+export function calculateMatchScore(p: Profile, o: NormalizedOpportunity): Breakdown {
+  const hay = `${o.title} ${o.company} ${o.description}`.toLowerCase();
+  const excluded =
+    p.excluded_companies.some((c) => c && o.company.toLowerCase() === c.toLowerCase()) ||
+    p.excluded_keywords.some((k) => k && hay.includes(k.toLowerCase()));
+
+  // Skills
+  const userSkills = new Set(p.skills.map(normSkill));
+  const req = o.skills.map((s) => [s, normSkill(s)] as const);
+  const nice = o.nice_to_have.map((s) => [s, normSkill(s)] as const);
+  const matchedSkills = req.filter(([, n]) => userSkills.has(n)).map(([s]) => s);
+  const missingSkills = req.filter(([, n]) => !userSkills.has(n)).map(([s]) => s);
+  const missingNice = nice.filter(([, n]) => !userSkills.has(n)).map(([s]) => s);
+  const coverage = req.length ? matchedSkills.length / req.length : 0.6;
+  const niceHits = nice.length - missingNice.length;
+  const relevance = userSkills.size ? Math.min(1, (matchedSkills.length + niceHits) / Math.min(userSkills.size, 6)) : coverage;
+  const skills_score = clamp(100 * (0.75 * coverage + 0.25 * relevance));
+
+  // Role
+  const titleTok = roleTokens(o.title);
+  const titleFam = roleFamily(o.title);
+  let role_score = p.roles.length ? 0 : 70;
+  let matchedRole: string | null = null;
+  for (const r of p.roles) {
+    const rt = roleTokens(r);
+    const fam = roleFamily(r);
+    let s: number;
+    if (!rt.size) s = fam === titleFam ? 70 : 30;
+    else {
+      const hit = [...rt].filter((t) => titleTok.has(t)).length;
+      s = hit === rt.size ? 100 : hit ? 40 + (60 * hit) / rt.size : [...rt].some((t) => hay.includes(t)) ? 35 : 15;
+    }
+    if (fam !== titleFam && fam !== "other" && titleFam !== "other") s = Math.min(s, 40);
+    if (s > role_score) { role_score = s; matchedRole = r; }
+  }
+  if (p.keywords.some((k) => k && o.title.toLowerCase().includes(k.toLowerCase()))) role_score = Math.max(role_score, 60);
+  role_score = clamp(role_score);
+
+  // Experience & seniority
+  const u = p.years_experience, m = o.min_years;
+  let exp = u >= m ? (u - m <= 4 ? 100 : 85) : Math.max(20, 100 - (m - u) * 25);
+  const sd = Math.abs((SENIORITY_RANK[o.seniority] ?? 2) - (SENIORITY_RANK[p.seniority] ?? 2));
+  exp -= sd * 15;
+  const experience_score = clamp(exp);
+
+  // Location
+  const remoteOnly = p.preferences.includes("remote_only");
+  const wantsRemote = remoteOnly || p.remote_preference.includes("remote");
+  const userLocTokens = p.locations.flatMap((l) => l.split(/[,—-]/).map((s) => s.trim().toLowerCase())).filter(Boolean);
+  const oppLocTokens = [o.location, o.country].flatMap((l) => l.split(/[,—-]/).map((s) => s.trim().toLowerCase())).filter(Boolean);
+  const locHit = userLocTokens.some((t) => oppLocTokens.includes(t) || (t === "bangalore" && oppLocTokens.includes("bengaluru")));
+  const global = o.country.toLowerCase() === "global" || userLocTokens.includes("global") || userLocTokens.includes("anywhere");
+  let location_score: number;
+  if (o.remote_type === "remote") location_score = wantsRemote ? (global || locHit || !p.locations.length ? 100 : 70) : 60;
+  else if (remoteOnly) location_score = 15;
+  else if (locHit || !p.locations.length) location_score = p.remote_preference.includes(o.remote_type) || !p.remote_preference.length ? 100 : 75;
+  else location_score = 25;
+
+  // Salary
+  let salary_score: number;
+  if (o.salary_max == null && o.salary_min == null) salary_score = 70;
+  else if (p.salary_min == null) salary_score = 100;
+  else {
+    const userMin = toAnnualINR(p.salary_min, p.currency, p.salary_period);
+    const oMax = toAnnualINR(o.salary_max ?? o.salary_min!, o.currency, o.salary_period);
+    const oMin = toAnnualINR(o.salary_min ?? o.salary_max!, o.currency, o.salary_period);
+    if (oMax >= userMin) salary_score = oMin >= userMin ? 100 : clamp(70 + 30 * ((oMax - userMin) / Math.max(1, oMax - oMin)));
+    else salary_score = clamp((oMax / userMin) * 70);
+  }
+
+  // Employment type & preferences
+  const typeMismatch = p.employment_types.length > 0 && !p.employment_types.includes(o.employment_type);
+  let adj = 0;
+  if (p.preferences.includes("product_company")) adj += o.company_type === "product" ? 3 : o.company_type === "services" ? -8 : 0;
+  if (p.preferences.includes("startup") && o.company_type === "startup") adj += 3;
+  if (p.preferences.includes("visa_sponsorship") && !locHit && !global && o.remote_type !== "remote" && !o.visa_sponsorship) adj -= 15;
+  if (p.companies.some((c) => c && o.company.toLowerCase() === c.toLowerCase())) adj += 5;
+  if (p.industries.some((i) => i && o.industry.toLowerCase().includes(i.toLowerCase()))) adj += 3;
+
+  let score = 0.3 * skills_score + 0.25 * role_score + 0.15 * experience_score + 0.15 * location_score + 0.15 * salary_score + adj;
+  if (typeMismatch) score *= 0.6;
+  if (excluded) score = 0;
+
+  return { score: clamp(score), skills_score, role_score, experience_score, location_score, salary_score, excluded,
+    matchedSkills, missingSkills, missingNice, matchedRole, typeMismatch };
+}
+
+export function generateMatchExplanation(p: Profile, o: NormalizedOpportunity, b: Breakdown): Explanation {
+  const strengths: string[] = [];
+  const gaps: string[] = [];
+  const list = (a: string[]) => (a.length <= 2 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
+
+  if (b.matchedSkills.length) strengths.push(`${list(b.matchedSkills.slice(0, 4))} match your ${b.matchedSkills.length >= 3 ? "core" : ""} skills`.replace("  ", " "));
+  if (b.role_score >= 80 && b.matchedRole) strengths.push(`Title matches your target role: ${b.matchedRole}`);
+  else if (b.role_score < 45) gaps.push(`Role is outside your target titles${p.roles.length ? ` (${p.roles[0]}…)` : ""}`);
+
+  if (p.years_experience >= o.min_years) {
+    if (o.min_years > 0) strengths.push(`Requires ${o.min_years}+ years — you have ${p.years_experience}`);
+    if (p.years_experience - o.min_years > 4) gaps.push(`May be junior for your ${p.years_experience} years of experience`);
+  } else gaps.push(`Asks for ${o.min_years}+ years; you have ${p.years_experience}`);
+  const sd = (SENIORITY_RANK[o.seniority] ?? 2) - (SENIORITY_RANK[p.seniority] ?? 2);
+  if (Math.abs(sd) >= 2) gaps.push(`${o.seniority.charAt(0).toUpperCase() + o.seniority.slice(1)}-level role vs your ${p.seniority} seniority`);
+
+  if (o.remote_type === "remote") {
+    if (b.location_score >= 70) strengths.push(o.country === "Global" ? "Remote, open globally" : `Remote position (${o.country})`);
+    else gaps.push("Remote role; you prefer hybrid or on-site");
+  } else if (b.location_score >= 75) strengths.push(`${o.remote_type === "hybrid" ? "Hybrid" : "On-site"} in ${o.location}, one of your locations`);
+  else if (b.location_score <= 25) gaps.push(`${o.remote_type === "hybrid" ? "Hybrid" : "On-site"} in ${o.location}, outside your locations`);
+
+  const sal = formatSalary(o);
+  if (o.salary_min == null && o.salary_max == null) gaps.push("Salary not disclosed");
+  else if (b.salary_score === 100) strengths.push(`Salary ${sal} is within your target range`);
+  else if (b.salary_score >= 70) strengths.push(`Salary ${sal} overlaps your target range`);
+  else gaps.push(`Salary ${sal} is below your minimum`);
+
+  for (const s of b.missingSkills.slice(0, 3)) gaps.push(`Requires ${s} experience`);
+  for (const s of b.missingNice.slice(0, 2)) gaps.push(`${s} experience is a plus`);
+
+  if (b.typeMismatch) gaps.push(`${o.employment_type.charAt(0).toUpperCase() + o.employment_type.slice(1)} role; you prefer ${list(p.employment_types)}`);
+  if (p.preferences.includes("product_company")) {
+    if (o.company_type === "product") strengths.push("Product company, matching your preference");
+    else if (o.company_type === "services") gaps.push("Services company; you prefer product companies");
+  }
+  if (p.preferences.includes("startup") && o.company_type === "startup") strengths.push("Startup, matching your preference");
+  if (p.preferences.includes("visa_sponsorship") && o.visa_sponsorship) strengths.push("Offers visa sponsorship");
+  if (p.companies.some((c) => c.toLowerCase() === o.company.toLowerCase())) strengths.push("One of your target companies");
+
+  const shortfall = Math.max(0, o.min_years - p.years_experience);
+  let difficulty: Explanation["difficulty"] = "low";
+  let difficultyReason = "You meet the stated requirements.";
+  if (b.missingSkills.length >= 2 || shortfall >= 2 || Math.abs(sd) >= 2) {
+    difficulty = "high";
+    difficultyReason = b.missingSkills.length >= 2 ? `Missing ${b.missingSkills.length} required skills.` : shortfall >= 2 ? `${shortfall} years short of the requirement.` : "Seniority is far from your level.";
+  } else if (b.missingSkills.length === 1 || shortfall === 1 || ["lead", "manager", "director"].includes(o.seniority)) {
+    difficulty = "medium";
+    difficultyReason = b.missingSkills.length ? `One required skill (${b.missingSkills[0]}) to address.` : shortfall ? "One year short of the stated experience." : "Senior role; expect a rigorous process.";
+  }
+  return { strengths: strengths.slice(0, 6), gaps: gaps.slice(0, 5), difficulty, difficultyReason };
+}
+
+export function recommendNextAction(score: number, e: Explanation): NextAction {
+  if (score >= 85) return { action: "apply", label: "Apply Now", reason: "Strong match across skills, role and preferences." };
+  if (score >= 70) return { action: "apply", label: "Apply Now", reason: e.gaps.length ? `Good match — address "${e.gaps[0]}" in your application.` : "Good match." };
+  if (score >= 50) return { action: "consider", label: "Consider", reason: "Partial match. Apply only if the gaps are acceptable to you." };
+  return { action: "skip", label: "Skip", reason: "Weak match. Your time is better spent elsewhere." };
+}
+
+export function generateDailyDigest(
+  name: string,
+  matches: { id: number; title: string; company: string; score: number }[],
+  appUrl: string,
+) {
+  const excellent = matches.filter((m) => m.score >= 85).length;
+  const good = matches.filter((m) => m.score >= 70 && m.score < 85).length;
+  const top = [...matches].sort((a, b) => b.score - a.score)[0];
+  const subject = `Your Opportunity Hunter Report: ${matches.length} new ${matches.length === 1 ? "opportunity" : "opportunities"}`;
+  const lines = [
+    `Hi ${name.split(" ")[0]},`,
+    ``,
+    `You found ${matches.length} new ${matches.length === 1 ? "opportunity" : "opportunities"} today.`,
+    `🔥 ${excellent} excellent ${excellent === 1 ? "match" : "matches"}`,
+    `⭐ ${good} good ${good === 1 ? "match" : "matches"}`,
+  ];
+  if (top) lines.push(``, `Top match:`, `${top.title} — ${top.company}`, `${top.score}% Match`, `${appUrl}/opportunities/${top.id}`);
+  lines.push(``, `See everything: ${appUrl}/opportunities`);
+  const text = lines.join("\n");
+  const html = `<div style="font-family:system-ui,sans-serif;max-width:520px"><p>Hi ${name.split(" ")[0]},</p>
+<p>You found <strong>${matches.length}</strong> new opportunities today.</p>
+<p>🔥 ${excellent} excellent matches<br/>⭐ ${good} good matches</p>
+${top ? `<p><strong>Top match</strong><br/>${top.title} — ${top.company}<br/><span style="color:#059669">${top.score}% Match</span></p>
+<p><a href="${appUrl}/opportunities/${top.id}" style="background:#18181b;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none">View Opportunity</a></p>` : ""}
+<p style="color:#71717a;font-size:12px">Opportunity Hunter · <a href="${appUrl}/alerts">Manage alerts</a></p></div>`;
+  return { subject, text, html, excellent, good, top };
+}
