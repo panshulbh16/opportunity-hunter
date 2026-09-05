@@ -6,7 +6,7 @@ import { PLANS, remainingDiscoveries, type Plan } from "./plans";
 import { activeSources } from "./sources";
 import {
   calculateMatchScore, deduplicateOpportunities, generateDailyDigest, generateMatchExplanation, generateSearchQueries,
-  normalizeOpportunity, type NormalizedOpportunity,
+  normalizeOpportunity, type NormalizedOpportunity, type Opportunity,
 } from "./ai";
 import { getProfile, parseOpp } from "./queries";
 
@@ -93,6 +93,18 @@ export async function runHunt(userId: number): Promise<HuntResult> {
   }
   track("search_run", userId, { retrieved, fresh, newMatches: saved.length, limited });
   return { retrieved, newOpportunities: fresh, newMatches: saved.length, notified, limited };
+}
+
+/** Score one listing for a user on demand (Pro users opening an unscored listing) and persist the match. */
+export function evaluateForUser(userId: number, opp: Opportunity) {
+  const profile = getProfile(userId);
+  if (!profile) return null;
+  const b = calculateMatchScore(profile, opp);
+  const explanation = generateMatchExplanation(profile, opp, b);
+  db.prepare(`INSERT OR IGNORE INTO matches (user_id, opportunity_id, score, skills_score, experience_score, location_score, salary_score,
+      role_score, explanation, status, viewed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'viewed', ?)`)
+    .run(userId, opp.id, b.score, b.skills_score, b.experience_score, b.location_score, b.salary_score, b.role_score, JSON.stringify(explanation), now());
+  return b;
 }
 
 /** Run hunts for every profile whose schedule is due. Called by the in-process scheduler and /api/cron/hunt. */

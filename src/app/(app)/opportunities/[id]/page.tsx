@@ -2,28 +2,31 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db, now } from "@/lib/db";
-import { getMatch } from "@/lib/queries";
+import { getMatch, type MatchRow } from "@/lib/queries";
+import { evaluateForUser } from "@/lib/agent";
 import { formatSalary, recommendNextAction } from "@/lib/ai";
+import { PLANS } from "@/lib/plans";
 import { track } from "@/lib/analytics";
 import { Check, ScoreBadge, Warn, scoreTone, timeAgo, titleCase } from "@/components/ui";
 import { OppActions } from "@/components/OppActions";
+import { UpgradeButton } from "@/components/UpgradeButton";
 
 export default async function OpportunityPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const id = parseInt((await params).id);
   if (!Number.isFinite(id)) notFound();
-  const item = getMatch(user.id, id);
+  let item = getMatch(user.id, id);
   if (!item) notFound();
-  const { match: m, opp: o } = item;
-  if (!m.viewed_at) {
-    db.prepare("UPDATE matches SET viewed_at = ?, status = CASE WHEN status = 'new' THEN 'viewed' ELSE status END WHERE id = ?").run(now(), m.id);
-    track("opportunity_viewed", user.id, { oppId: o.id, score: m.score });
+  if (!item.match && user.subscription_plan === "pro") {
+    evaluateForUser(user.id, item.opp);
+    item = getMatch(user.id, id)!;
   }
-  const e = m.explanation;
-  const next = recommendNextAction(m.score, e);
-  const applied = ["applied", "interview", "offer"].includes(m.application_status ?? "");
-  const breakdown = [["Skills", m.skills_score], ["Experience", m.experience_score], ["Location", m.location_score], ["Salary", m.salary_score], ["Role", m.role_score]] as const;
-  const diffTone = { low: "text-emerald-700 bg-emerald-50", medium: "text-amber-700 bg-amber-50", high: "text-red-700 bg-red-50" }[e.difficulty];
+  const { match: m, opp: o } = item;
+  if (m && !m.viewed_at) {
+    db.prepare("UPDATE matches SET viewed_at = ?, status = CASE WHEN status = 'new' THEN 'viewed' ELSE status END WHERE id = ?").run(now(), m.id);
+  }
+  track("opportunity_viewed", user.id, { oppId: o.id, score: m?.score ?? null });
+  const applied = ["applied", "interview", "offer"].includes(m?.application_status ?? "");
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -36,7 +39,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
                 <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{o.title}</h1>
                 <p className="mt-1 text-zinc-600">{o.company}{o.company_type && <span className="text-zinc-400"> · {titleCase(o.company_type)} company</span>}</p>
               </div>
-              <ScoreBadge score={m.score} size="lg" />
+              {m && <ScoreBadge score={m.score} size="lg" />}
             </div>
             <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
               {[["Location", o.location], ["Salary", formatSalary(o)], ["Employment type", titleCase(o.employment_type)], ["Posted", `${timeAgo(o.posted_date)} (${o.posted_date})`], ["Source", o.source], ["Experience", `${o.min_years}+ years · ${titleCase(o.seniority)}`]].map(([k, v]) => (
@@ -44,7 +47,8 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
               ))}
             </dl>
             <div className="mt-6 border-t border-zinc-100 pt-5">
-              <OppActions oppId={o.id} saved={Boolean(m.saved)} applied={applied} applyUrl={o.application_url} variant="page" />
+              {m ? <OppActions oppId={o.id} saved={Boolean(m.saved)} applied={applied} applyUrl={o.application_url} variant="page" />
+                : <a href={o.application_url} target="_blank" rel="noopener noreferrer" className="btn-primary">View listing ↗</a>}
             </div>
           </div>
 
@@ -60,40 +64,60 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
         </div>
 
         <aside className="space-y-4">
-          <div className="card p-5 rise-in" style={{ animationDelay: "60ms" }}>
-            <h2 className="text-sm font-semibold text-zinc-900">AI Analysis</h2>
-            <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-zinc-900">{m.score}<span className="text-base font-normal text-zinc-400">/100</span></p>
-            <div className="mt-4 space-y-2.5">
-              {breakdown.map(([k, s]) => (
-                <div key={k}>
-                  <div className="flex justify-between text-xs"><span className="text-zinc-600">{k}</span><span className="font-medium tabular-nums text-zinc-800">{s}%</span></div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100"><div className={`h-full rounded-full ${s >= 85 ? "bg-emerald-500" : s >= 70 ? "bg-amber-400" : "bg-zinc-400"}`} style={{ width: `${s}%` }} /></div>
-                </div>
-              ))}
+          {m ? <Analysis m={m} /> : (
+            <div className="card p-5 rise-in">
+              <h2 className="text-sm font-semibold text-zinc-900">Not scored for you yet</h2>
+              <p className="mt-2 text-[13px] text-zinc-600">
+                The agent scores {PLANS.free.weeklyDiscoveries} discoveries a week on the Free plan and picks the strongest ones. Pro scores every listing it gathers, with the full breakdown, explanation and next-step advice.
+              </p>
+              <div className="mt-4"><UpgradeButton /></div>
             </div>
-          </div>
-          <div className="card p-5">
-            <h3 className="text-sm font-semibold text-zinc-900">Why you match</h3>
-            <ul className="mt-3 space-y-2 text-[13px] text-zinc-700">
-              {e.strengths.map((s) => <li key={s} className="flex gap-2"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />{s}</li>)}
-              {!e.strengths.length && <li className="text-zinc-400">Few overlaps with your profile.</li>}
-            </ul>
-            <h3 className="mt-5 text-sm font-semibold text-zinc-900">Potential gaps</h3>
-            <ul className="mt-3 space-y-2 text-[13px] text-zinc-600">
-              {e.gaps.map((g) => <li key={g} className="flex gap-2"><Warn className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />{g}</li>)}
-              {!e.gaps.length && <li className="text-zinc-400">None detected.</li>}
-            </ul>
-          </div>
-          <div className="card p-5">
-            <h3 className="text-sm font-semibold text-zinc-900">Application difficulty</h3>
-            <p className={`mt-2 inline-block rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${diffTone}`}>{e.difficulty}</p>
-            <p className="mt-2 text-[13px] text-zinc-600">{e.difficultyReason}</p>
-            <h3 className="mt-5 text-sm font-semibold text-zinc-900">Recommended action</h3>
-            <p className={`mt-2 inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${scoreTone(m.score)}`}>{next.label}</p>
-            <p className="mt-2 text-[13px] text-zinc-600">{next.reason}</p>
-          </div>
+          )}
         </aside>
       </div>
     </div>
+  );
+}
+
+function Analysis({ m }: { m: MatchRow }) {
+  const e = m.explanation;
+  const next = recommendNextAction(m.score, e);
+  const breakdown = [["Skills", m.skills_score], ["Experience", m.experience_score], ["Location", m.location_score], ["Salary", m.salary_score], ["Role", m.role_score]] as const;
+  const diffTone = { low: "text-emerald-700 bg-emerald-50", medium: "text-amber-700 bg-amber-50", high: "text-red-700 bg-red-50" }[e.difficulty];
+  return (
+    <>
+      <div className="card p-5 rise-in" style={{ animationDelay: "60ms" }}>
+        <h2 className="text-sm font-semibold text-zinc-900">AI Analysis</h2>
+        <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-zinc-900">{m.score}<span className="text-base font-normal text-zinc-400">/100</span></p>
+        <div className="mt-4 space-y-2.5">
+          {breakdown.map(([k, s]) => (
+            <div key={k}>
+              <div className="flex justify-between text-xs"><span className="text-zinc-600">{k}</span><span className="font-medium tabular-nums text-zinc-800">{s}%</span></div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100"><div className={`h-full rounded-full ${s >= 85 ? "bg-emerald-500" : s >= 70 ? "bg-amber-400" : "bg-zinc-400"}`} style={{ width: `${s}%` }} /></div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-zinc-900">Why you match</h3>
+        <ul className="mt-3 space-y-2 text-[13px] text-zinc-700">
+          {e.strengths.map((s) => <li key={s} className="flex gap-2"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />{s}</li>)}
+          {!e.strengths.length && <li className="text-zinc-400">Few overlaps with your profile.</li>}
+        </ul>
+        <h3 className="mt-5 text-sm font-semibold text-zinc-900">Potential gaps</h3>
+        <ul className="mt-3 space-y-2 text-[13px] text-zinc-600">
+          {e.gaps.map((g) => <li key={g} className="flex gap-2"><Warn className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />{g}</li>)}
+          {!e.gaps.length && <li className="text-zinc-400">None detected.</li>}
+        </ul>
+      </div>
+      <div className="card p-5">
+        <h3 className="text-sm font-semibold text-zinc-900">Application difficulty</h3>
+        <p className={`mt-2 inline-block rounded-md px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${diffTone}`}>{e.difficulty}</p>
+        <p className="mt-2 text-[13px] text-zinc-600">{e.difficultyReason}</p>
+        <h3 className="mt-5 text-sm font-semibold text-zinc-900">Recommended action</h3>
+        <p className={`mt-2 inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${scoreTone(m.score)}`}>{next.label}</p>
+        <p className="mt-2 text-[13px] text-zinc-600">{next.reason}</p>
+      </div>
+    </>
   );
 }

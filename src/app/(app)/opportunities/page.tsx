@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
-import { listMatches, listSaved, type Filters } from "@/lib/queries";
+import { getProfile, listOpportunities, listSaved, type Filters } from "@/lib/queries";
+import { calculateMatchScore } from "@/lib/ai";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
 
@@ -16,12 +17,16 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
     maxYears: num("maxYears"), type: sp.type, postedDays: num("postedDays"), company: sp.company?.slice(0, 60), skill: sp.skill?.slice(0, 40),
     sort: sp.sort, status: sp.status === "rejected" ? "rejected" : undefined,
   };
-  const items = sp.status === "saved" ? listSaved(user.id) : listMatches(user.id, f);
-  const active = Object.entries(sp).filter(([k, v]) => v && k !== "sort" && k !== "hidden").length;
+  const items = sp.status === "saved" ? listSaved(user.id) : listOpportunities(user.id, f);
+  const profile = getProfile(user.id);
+  // Pro: score unscored listings on the fly for display; persisted only when the listing is opened.
+  if (user.subscription_plan === "pro" && profile) for (const it of items) if (!it.match) it.liveScore = calculateMatchScore(profile, it.opp).score;
+  const active = Object.entries(sp).filter(([k, v]) => v && k !== "sort" && k !== "hidden" && k !== "status").length;
+  const matched = items.filter((i) => i.match).length;
 
   return (
     <>
-      <PageHeader title={sp.status === "saved" ? "Saved opportunities" : sp.status === "rejected" ? "Rejected opportunities" : "Opportunities"} description={`${items.length} ${items.length === 1 ? "result" : "results"}${active ? ` · ${active} ${active === 1 ? "filter" : "filters"} active` : ""}`}>
+      <PageHeader title={sp.status === "saved" ? "Saved opportunities" : sp.status === "rejected" ? "Rejected opportunities" : "Opportunities"} description={`${items.length} ${items.length === 1 ? "listing" : "listings"}${!sp.status ? ` · ${matched} matched to your profile` : ""}${active ? ` · ${active} ${active === 1 ? "filter" : "filters"} active` : ""}`}>
         {sp.hidden && <span className="text-sm text-zinc-500">Hid {sp.hidden} similar {sp.hidden === "1" ? "opportunity" : "opportunities"}.</span>}
       </PageHeader>
 
@@ -61,13 +66,13 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
       </div>
 
       {items.length ? (
-        <div className="grid gap-4 lg:grid-cols-2">{items.map((item, i) => <OpportunityCard key={item.match.id} item={item} index={i} />)}</div>
+        <div className="grid gap-4 lg:grid-cols-2">{items.map((item, i) => <OpportunityCard key={item.opp.id} item={item} index={i} />)}</div>
       ) : sp.status === "saved" ? (
         <EmptyState title="Nothing saved yet." body="When you find an opportunity worth pursuing, save it here." cta="Find Opportunities" href="/opportunities" />
       ) : sp.status === "rejected" ? (
         <EmptyState title="Nothing rejected." body="Opportunities you reject stay here and never come back to your feed." />
       ) : (
-        <EmptyState title="No opportunities match these filters." body={active ? "Try loosening a filter or two." : "The agent will keep hunting. You can also broaden your search profile."} cta={active ? "Clear filters" : "Edit search profile"} href={active ? "/opportunities" : "/profile"} />
+        <EmptyState title={active ? "No opportunities match these filters." : "No opportunities gathered yet."} body={active ? "Try loosening a filter or two." : "Run a search from the dashboard and every tech job the agent finds will show up here."} cta={active ? "Clear filters" : "Go to dashboard"} href={active ? "/opportunities" : "/dashboard"} />
       )}
     </>
   );

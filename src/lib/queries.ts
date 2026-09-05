@@ -24,37 +24,38 @@ export type MatchRow = {
   viewed_at: string | null; created_at: string; saved: number; application_status: string | null;
 };
 
-export type MatchWithOpp = { match: MatchRow; opp: Opportunity };
+export type MatchWithOpp = { match: MatchRow | null; opp: Opportunity; liveScore?: number };
+export type MatchedOpp = MatchWithOpp & { match: MatchRow };
 
-const MATCH_SELECT = `
-  SELECT m.*, o.id AS o_id, o.title, o.company, o.location, o.country, o.remote_type, o.salary_min, o.salary_max, o.currency,
-    o.salary_period, o.description, o.skills, o.nice_to_have, o.min_years, o.seniority, o.employment_type, o.company_type,
-    o.industry, o.visa_sponsorship, o.source, o.source_url, o.application_url, o.posted_date, o.canonical_url, o.dedupe_key,
-    o.is_demo, o.created_at AS o_created_at, o.category,
-    (SELECT 1 FROM saved_opportunities s WHERE s.user_id = m.user_id AND s.opportunity_id = m.opportunity_id) AS saved,
-    (SELECT status FROM applications a WHERE a.user_id = m.user_id AND a.opportunity_id = m.opportunity_id) AS application_status
-  FROM matches m JOIN opportunities o ON o.id = m.opportunity_id`;
+// Every gathered opportunity, left-joined with this user's match (if the agent scored it for them).
+const OPP_SELECT = `
+  SELECT m.id AS m_id, m.user_id, m.opportunity_id, m.score, m.skills_score, m.experience_score, m.location_score, m.salary_score,
+    m.role_score, m.explanation, m.status, m.viewed_at, m.created_at AS m_created_at, o.*,
+    (SELECT 1 FROM saved_opportunities s WHERE s.user_id = m.user_id AND s.opportunity_id = o.id) AS saved,
+    (SELECT status FROM applications a WHERE a.user_id = m.user_id AND a.opportunity_id = o.id) AS application_status
+  FROM opportunities o LEFT JOIN matches m ON m.opportunity_id = o.id AND m.user_id = ?`;
 
 function splitRow(r: Record<string, unknown>): MatchWithOpp {
-  const match = {
-    id: r.id, user_id: r.user_id, opportunity_id: r.opportunity_id, score: r.score, skills_score: r.skills_score,
+  const match = r.m_id == null ? null : {
+    id: r.m_id, user_id: r.user_id, opportunity_id: r.opportunity_id, score: r.score, skills_score: r.skills_score,
     experience_score: r.experience_score, location_score: r.location_score, salary_score: r.salary_score,
     role_score: r.role_score, explanation: json<Explanation>(r.explanation as string, { strengths: [], gaps: [], difficulty: "medium", difficultyReason: "" }),
-    status: r.status, viewed_at: r.viewed_at, created_at: r.created_at, saved: r.saved ?? 0, application_status: r.application_status ?? null,
+    status: r.status, viewed_at: r.viewed_at, created_at: r.m_created_at, saved: r.saved ?? 0, application_status: r.application_status ?? null,
   } as MatchRow;
-  const opp = parseOpp({ ...r, id: r.o_id, created_at: r.o_created_at });
-  return { match, opp };
+  return { match, opp: parseOpp(r) };
 }
 
 export type Filters = {
   q?: string; minScore?: number; location?: string; remote?: string; minSalary?: number; maxYears?: number;
   type?: string; postedDays?: number; company?: string; skill?: string; status?: string; sort?: string; limit?: number;
+  matchedOnly?: boolean;
 };
 
-export function listMatches(userId: number, f: Filters = {}): MatchWithOpp[] {
-  const where: string[] = ["m.user_id = ?"];
+export function listOpportunities(userId: number, f: Filters = {}): MatchWithOpp[] {
+  const where: string[] = [];
   const args: unknown[] = [userId];
-  if (f.status) { where.push("m.status = ?"); args.push(f.status); } else where.push("m.status NOT IN ('rejected','hidden')");
+  if (f.status) { where.push("m.status = ?"); args.push(f.status); } else where.push("(m.status IS NULL OR m.status NOT IN ('rejected','hidden'))");
+  if (f.matchedOnly) where.push("m.id IS NOT NULL");
   if (f.q) { where.push("(o.title LIKE ? OR o.company LIKE ? OR o.description LIKE ? OR o.skills LIKE ?)"); args.push(...Array(4).fill(`%${f.q}%`)); }
   if (f.minScore) { where.push("m.score >= ?"); args.push(f.minScore); }
   if (f.location) { where.push("(o.location LIKE ? OR o.country LIKE ?)"); args.push(`%${f.location}%`, `%${f.location}%`); }
@@ -65,18 +66,25 @@ export function listMatches(userId: number, f: Filters = {}): MatchWithOpp[] {
   if (f.postedDays) { where.push("o.posted_date >= date('now', ?)"); args.push(`-${f.postedDays} days`); }
   if (f.company) { where.push("o.company LIKE ?"); args.push(`%${f.company}%`); }
   if (f.skill) { where.push("(o.skills LIKE ? OR o.nice_to_have LIKE ?)"); args.push(`%${f.skill}%`, `%${f.skill}%`); }
-  const order = { newest: "o.posted_date DESC, m.score DESC", salary: "COALESCE(o.salary_max, o.salary_min) DESC", relevance: "m.role_score DESC, m.skills_score DESC" }[f.sort ?? ""] ?? "m.score DESC, o.posted_date DESC";
-  const rows = db.prepare(`${MATCH_SELECT} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ?`).all(...args, f.limit ?? 100) as Record<string, unknown>[];
+  const order = {
+    newest: "o.posted_date DESC, m.score DESC",
+    salary: "COALESCE(o.salary_max, o.salary_min) DESC NULLS LAST, m.score DESC",
+    relevance: "m.role_score DESC NULLS LAST, m.skills_score DESC",
+  }[f.sort ?? ""] ?? "m.score DESC NULLS LAST, o.posted_date DESC";
+  const rows = db.prepare(`${OPP_SELECT} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ?`).all(...args, f.limit ?? 100) as Record<string, unknown>[];
   return rows.map(splitRow);
 }
 
+export const listMatches = (userId: number, f: Filters = {}) => listOpportunities(userId, { ...f, matchedOnly: true }) as MatchedOpp[];
+
+/** One opportunity with this user's match attached when it exists; null if the opportunity doesn't exist. */
 export function getMatch(userId: number, opportunityId: number): MatchWithOpp | null {
-  const r = db.prepare(`${MATCH_SELECT} WHERE m.user_id = ? AND m.opportunity_id = ?`).get(userId, opportunityId) as Record<string, unknown> | undefined;
+  const r = db.prepare(`${OPP_SELECT} WHERE o.id = ?`).get(userId, opportunityId) as Record<string, unknown> | undefined;
   return r ? splitRow(r) : null;
 }
 
 export function listSaved(userId: number): MatchWithOpp[] {
-  const rows = db.prepare(`${MATCH_SELECT} JOIN saved_opportunities s2 ON s2.user_id = m.user_id AND s2.opportunity_id = m.opportunity_id WHERE m.user_id = ? ORDER BY s2.created_at DESC`).all(userId) as Record<string, unknown>[];
+  const rows = db.prepare(`${OPP_SELECT} JOIN saved_opportunities s2 ON s2.user_id = ? AND s2.opportunity_id = o.id ORDER BY s2.created_at DESC`).all(userId, userId) as Record<string, unknown>[];
   return rows.map(splitRow);
 }
 
