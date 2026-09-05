@@ -99,9 +99,10 @@ const SEEDS: Seed[] = [
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 const daysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 
-function toRaw(s: Seed, sourceName = "Demo Source", host = "demo.opportunityhunter.app"): RawOpportunity {
+// Demo listings link to an in-app sample page (/demo/...) rather than a real employer site.
+function toRaw(s: Seed, sourceName = "Demo Source", prefix = "/demo/jobs"): RawOpportunity {
   const [title, company, location, remote, country, salary, skills, nice, min_years, seniority, type, days, description, visa] = s;
-  const url = `https://${host}/jobs/${slug(company)}/${slug(title)}`;
+  const url = `${prefix}/${slug(company)}/${slug(title)}`;
   return {
     source_name: sourceName,
     source_url: url,
@@ -133,7 +134,7 @@ export const demoSource: SourceAdapter = {
     const records = SEEDS.map((s) => toRaw(s));
     // A second listing of the first job via an "aggregator" with a different URL and tracking params;
     // deduplicateOpportunities() must collapse it into the original.
-    const dup = toRaw(SEEDS[0], "Demo Aggregator", "jobs.demo-aggregator.example");
+    const dup = toRaw(SEEDS[0], "Demo Aggregator", "/demo/aggregator");
     dup.source_url += "?utm_source=aggregator&ref=123";
     dup.title = "Senior Python AI Engineer (Remote)";
     return [...records, dup];

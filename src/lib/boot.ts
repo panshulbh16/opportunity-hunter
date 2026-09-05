@@ -33,6 +33,10 @@ const g = globalThis as unknown as { __booted?: boolean };
 export async function boot() {
   if (g.__booted) return;
   g.__booted = true;
+  // One-off: earlier demo rows pointed at a fake external host; rewrite them to the in-app sample page.
+  for (const [from, to] of [["https://demo.opportunityhunter.app/jobs", "/demo/jobs"], ["https://jobs.demo-aggregator.example/jobs", "/demo/aggregator"]])
+    db.prepare(`UPDATE opportunities SET source_url = replace(source_url, ?, ?), application_url = replace(application_url, ?, ?),
+      canonical_url = replace(canonical_url, ?, ?) WHERE is_demo = 1 AND source_url LIKE ?`).run(from, to, from, to, from, to, `${from}%`);
   await seedDemoUser();
   // ponytail: in-process scheduler; swap for an external cron hitting /api/cron/hunt when scaling past one instance
   setInterval(() => runDueHunts().catch((e) => console.error("[agent] scheduled run failed", e)), 15 * 60 * 1000).unref();
