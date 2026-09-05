@@ -17,6 +17,7 @@
 html { scroll-behavior: smooth; }
 body { @apply bg-white text-zinc-900 antialiased; font-feature-settings: "cv11", "ss01"; }
 
+@layer components {
 .btn, .btn-primary, .btn-accent, .btn-secondary, .btn-ghost, .btn-danger {
   @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 h-10 text-sm font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap cursor-pointer;
 }
@@ -41,6 +42,7 @@ select.input {
 .chip { @apply inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700; }
 .check-row { @apply flex items-center gap-3 rounded-lg border border-zinc-200 px-3.5 py-3 text-sm cursor-pointer transition-colors hover:bg-zinc-50 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50/40; }
 .check-row input { @apply h-4 w-4 accent-indigo-600; }
+}
 
 .skeleton { @apply animate-pulse rounded-md bg-zinc-100; }
 .fade-in { animation: var(--animate-fade); }
