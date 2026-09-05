@@ -45,7 +45,6 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
             </dl>
             <div className="mt-6 border-t border-zinc-100 pt-5">
               <OppActions oppId={o.id} saved={Boolean(m.saved)} applied={applied} applyUrl={o.application_url} variant="page" />
-              {o.is_demo ? <p className="mt-3 text-xs text-zinc-400">Demo listing — the apply link is a placeholder until a live source is connected.</p> : null}
             </div>
           </div>
 

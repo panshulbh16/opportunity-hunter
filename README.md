@@ -23,7 +23,7 @@ Next.js 15 (App Router, server actions) · SQLite via `better-sqlite3` (file at 
 |---|---|
 | `src/lib/ai/index.ts` | `parseSearchProfile`, `generateSearchQueries`, `normalizeOpportunity`, `deduplicateOpportunities`, `calculateMatchScore`, `generateMatchExplanation`, `recommendNextAction`, `generateDailyDigest` — pure, deterministic, swappable for an LLM per function |
 | `src/lib/agent.ts` | The Opportunity Hunter Agent: profile → queries → sources → normalize → dedupe → score → explain → save → notify. Enforces free-plan limits server-side |
-| `src/lib/sources/` | `SourceAdapter` interface + registry. `demo.ts` ships 30 fictional listings (flagged `is_demo=1`). Add a real feed in `index.ts` |
+| `src/lib/sources/` | `SourceAdapter` interface + registry. `jsearch.ts` is the live feed; `demo.ts` (30 fictional listings) is now only the engine's test fixture |
 | `src/lib/boot.ts` | Seeds the demo account; runs due hunts every 15 min in-process. `POST /api/cron/hunt` (Bearer `CRON_SECRET`) for external schedulers |
 | `src/lib/email.ts` | `EmailProvider` — console by default, Resend when `RESEND_API_KEY` is set |
 | `src/lib/plans.ts` | Plan definitions and weekly discovery caps |
