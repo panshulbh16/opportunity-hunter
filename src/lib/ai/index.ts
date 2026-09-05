@@ -281,7 +281,7 @@ export function normalizeOpportunity(raw: RawOpportunity): NormalizedOpportunity
   const desc = raw.description;
   const lower = `${raw.title} ${desc}`.toLowerCase();
   const sal = parseSalary(raw.salary);
-  const skills = raw.skills?.length ? raw.skills : KNOWN_SKILLS.filter((s) => lower.includes(s.toLowerCase())).slice(0, 8);
+  const skills = raw.skills?.length ? raw.skills : KNOWN_SKILLS.filter((s) => new RegExp(`(^|[^a-z0-9])${s.toLowerCase().replace(/[.+/]/g, "\\$&")}([^a-z0-9]|$)`).test(lower)).slice(0, 8);
   const yearsMatch = desc.match(/(\d+)\s*\+?\s*years?/i);
   const tl = raw.title.toLowerCase();
   const seniority = raw.seniority ?? (/\bintern/.test(tl) ? "intern" : /\bjunior|entry/.test(tl) ? "junior" : /\bdirector|head of|vp\b/.test(tl) ? "director"
