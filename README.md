@@ -34,7 +34,7 @@ Next.js 15 (App Router, server actions) · SQLite via `better-sqlite3` (file at 
 - **Google login**: `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`. Button appears automatically.
 - **Email**: `RESEND_API_KEY`. Otherwise digests and reset links print to the server console.
 - **Payments**: `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET`, then implement checkout + webhook in `startUpgrade()` (`src/app/actions.ts`). Nothing is simulated; admins can set plans manually at `/admin`.
-- **Live job sources**: implement `fetch()` on the placeholder adapter in `src/lib/sources/index.ts` with a licensed API. No scraping.
+- **Live job listings**: `RAPIDAPI_KEY` enables the JSearch adapter (`src/lib/sources/jsearch.ts`) — a licensed aggregator that includes LinkedIn, Indeed and Glassdoor postings. LinkedIn has no third-party search API and forbids scraping, so this is the legitimate route. Add further adapters in `src/lib/sources/index.ts`.
 
 ## Future categories
 
