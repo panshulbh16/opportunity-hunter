@@ -21,7 +21,7 @@ export default async function Pricing() {
       <main className="mx-auto max-w-4xl px-6 py-20">
         <div className="text-center">
           <h1 className="text-4xl font-semibold tracking-tight text-zinc-900">Simple pricing</h1>
-          <p className="mt-3 text-zinc-600">Start free. Upgrade when the agent is finding you more than five good matches a week.</p>
+          <p className="mt-3 text-zinc-600">Start free. Upgrade when the agent is finding you more than {PLANS.free.weeklyDiscoveries} good matches a week.</p>
         </div>
         <div className="mt-14 grid gap-6 md:grid-cols-2">
           <div className="card p-8">

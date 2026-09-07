@@ -1,12 +1,14 @@
 import { db } from "./db";
 
+const FREE_WEEKLY = 15;
+
 export const PLANS = {
   free: {
     name: "Free",
     price: 0,
-    weeklyDiscoveries: 5,
+    weeklyDiscoveries: FREE_WEEKLY,
     profiles: 1,
-    features: ["5 new opportunities per week", "Basic matching", "Basic application tracker", "One search profile"],
+    features: [`${FREE_WEEKLY} new opportunities per week`, "Basic matching", "Basic application tracker", "One search profile"],
   },
   pro: {
     name: "Pro",
