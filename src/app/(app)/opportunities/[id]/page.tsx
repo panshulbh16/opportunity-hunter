@@ -11,6 +11,12 @@ import { Check, ScoreBadge, Warn, scoreTone, timeAgo, titleCase } from "@/compon
 import { OppActions } from "@/components/OppActions";
 import { UpgradeButton } from "@/components/UpgradeButton";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const id = parseInt((await params).id);
+  const o = Number.isFinite(id) ? (db.prepare("SELECT title, company FROM opportunities WHERE id = ?").get(id) as { title: string; company: string } | undefined) : undefined;
+  return { title: o ? `${o.title} — ${o.company}` : "Opportunity" };
+}
+
 export default async function OpportunityPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const id = parseInt((await params).id);

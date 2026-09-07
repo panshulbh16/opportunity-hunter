@@ -37,6 +37,21 @@ assert.ok(e.strengths.some((s) => s.includes("Python")), "explanation names matc
 assert.ok(e.gaps.some((s) => s.includes("Kubernetes")), "explanation names nice-to-have gap");
 assert.equal(recommendNextAction(b.score, e).action, "apply");
 
+// Explanation wording: singular vs plural skills, and salary-not-disclosed deferred behind real gaps.
+const single = generateMatchExplanation(profile, byTitle("Java Backend Developer"), score("Java Backend Developer"));
+assert.ok(!single.strengths.concat(single.gaps).some((s) => /\b\w+ match your skills/.test(s)), "single skill reads 'matches'");
+const undisclosed = { ...byTitle("Senior Python AI Engineer"), salary_min: null, salary_max: null };
+const ue = generateMatchExplanation(profile, undisclosed, calculateMatchScore(profile, undisclosed));
+assert.equal(ue.gaps.at(-1), "Salary not disclosed", "undisclosed salary is the last gap, not the first");
+assert.ok(ue.gaps.length > 1, "real gaps still surface alongside it");
+
+// A profile open "globally" shouldn't be told an on-site role is outside its locations.
+const globalProfile: Profile = { ...profile, locations: ["India", "Global"] };
+const abroad = byTitle("Machine Learning Engineer — Computer Vision"); // Singapore, on-site
+const ge = generateMatchExplanation(globalProfile, abroad, calculateMatchScore(globalProfile, abroad));
+assert.ok(!ge.gaps.some((g) => g.includes("outside your locations")), "global scope is not 'outside your locations'");
+assert.ok(calculateMatchScore(globalProfile, abroad).location_score > calculateMatchScore(profile, abroad).location_score, "global scope scores above a plain mismatch");
+
 assert.deepEqual(parseSalary("₹25–35 LPA"), { salary_min: 2500000, salary_max: 3500000, currency: "INR", salary_period: "year" });
 assert.deepEqual(parseSalary("$90k–130k"), { salary_min: 90000, salary_max: 130000, currency: "USD", salary_period: "year" });
 assert.deepEqual(parseSalary("S$1500/month"), { salary_min: 1500, salary_max: 1500, currency: "SGD", salary_period: "month" });

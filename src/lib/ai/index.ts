@@ -73,6 +73,8 @@ export type Breakdown = {
   missingNice: string[];
   matchedRole: string | null;
   typeMismatch: boolean;
+  locHit: boolean;
+  globalScope: boolean;
 };
 
 export type Explanation = {
@@ -383,7 +385,9 @@ export function calculateMatchScore(p: Profile, o: NormalizedOpportunity): Break
   let location_score: number;
   if (o.remote_type === "remote") location_score = wantsRemote ? (global || locHit || !p.locations.length ? 100 : 70) : 60;
   else if (remoteOnly) location_score = 15;
+  // A profile listing "Global"/"anywhere" accepts on-site roles anywhere, though a literal location match still ranks higher.
   else if (locHit || !p.locations.length) location_score = p.remote_preference.includes(o.remote_type) || !p.remote_preference.length ? 100 : 75;
+  else if (global) location_score = 60;
   else location_score = 25;
 
   // Salary
@@ -412,7 +416,7 @@ export function calculateMatchScore(p: Profile, o: NormalizedOpportunity): Break
   if (excluded) score = 0;
 
   return { score: clamp(score), skills_score, role_score, experience_score, location_score, salary_score, excluded,
-    matchedSkills, missingSkills, missingNice, matchedRole, typeMismatch };
+    matchedSkills, missingSkills, missingNice, matchedRole, typeMismatch, locHit, globalScope: global };
 }
 
 export function generateMatchExplanation(p: Profile, o: NormalizedOpportunity, b: Breakdown): Explanation {
@@ -420,7 +424,10 @@ export function generateMatchExplanation(p: Profile, o: NormalizedOpportunity, b
   const gaps: string[] = [];
   const list = (a: string[]) => (a.length <= 2 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
 
-  if (b.matchedSkills.length) strengths.push(`${list(b.matchedSkills.slice(0, 4))} match your ${b.matchedSkills.length >= 3 ? "core" : ""} skills`.replace("  ", " "));
+  if (b.matchedSkills.length) {
+    const shown = b.matchedSkills.slice(0, 4);
+    strengths.push(`${list(shown)} ${shown.length === 1 ? "matches" : "match"} your ${b.matchedSkills.length >= 3 ? "core " : ""}skills`);
+  }
   if (b.role_score >= 80 && b.matchedRole) strengths.push(`Title matches your target role: ${b.matchedRole}`);
   else if (b.role_score < 45) gaps.push(`Role is outside your target titles${p.roles.length ? ` (${p.roles[0]}…)` : ""}`);
 
@@ -434,14 +441,22 @@ export function generateMatchExplanation(p: Profile, o: NormalizedOpportunity, b
   if (o.remote_type === "remote") {
     if (b.location_score >= 70) strengths.push(o.country === "Global" ? "Remote, open globally" : `Remote position (${o.country})`);
     else gaps.push("Remote role; you prefer hybrid or on-site");
-  } else if (b.location_score >= 75) strengths.push(`${o.remote_type === "hybrid" ? "Hybrid" : "On-site"} in ${o.location}, one of your locations`);
-  else if (b.location_score <= 25) gaps.push(`${o.remote_type === "hybrid" ? "Hybrid" : "On-site"} in ${o.location}, outside your locations`);
+  } else {
+    const kind = o.remote_type === "hybrid" ? "Hybrid" : "On-site";
+    if (!p.locations.length) strengths.push(`${kind} in ${o.location}`);
+    else if (b.locHit) strengths.push(`${kind} in ${o.location}, one of your locations`);
+    else if (b.globalScope) gaps.push(`${kind} in ${o.location} — you're open globally, but this needs you on site`);
+    else gaps.push(`${kind} in ${o.location}, outside your locations`);
+  }
 
   const sal = formatSalary(o);
-  if (o.salary_min == null && o.salary_max == null) gaps.push("Salary not disclosed");
-  else if (b.salary_score === 100) strengths.push(`Salary ${sal} is within your target range`);
-  else if (b.salary_score >= 70) strengths.push(`Salary ${sal} overlaps your target range`);
-  else gaps.push(`Salary ${sal} is below your minimum`);
+  // Most feeds omit pay, so this note is deferred to the end of the list rather than crowding out real gaps.
+  const undisclosed = o.salary_min == null && o.salary_max == null;
+  if (!undisclosed) {
+    if (b.salary_score === 100) strengths.push(`Salary ${sal} is within your target range`);
+    else if (b.salary_score >= 70) strengths.push(`Salary ${sal} overlaps your target range`);
+    else gaps.push(`Salary ${sal} is below your minimum`);
+  }
 
   for (const s of b.missingSkills.slice(0, 3)) gaps.push(`Requires ${s} experience`);
   for (const s of b.missingNice.slice(0, 2)) gaps.push(`${s} experience is a plus`);
@@ -454,6 +469,7 @@ export function generateMatchExplanation(p: Profile, o: NormalizedOpportunity, b
   if (p.preferences.includes("startup") && o.company_type === "startup") strengths.push("Startup, matching your preference");
   if (p.preferences.includes("visa_sponsorship") && o.visa_sponsorship) strengths.push("Offers visa sponsorship");
   if (p.companies.some((c) => c.toLowerCase() === o.company.toLowerCase())) strengths.push("One of your target companies");
+  if (undisclosed) gaps.push("Salary not disclosed");
 
   const shortfall = Math.max(0, o.min_years - p.years_experience);
   let difficulty: Explanation["difficulty"] = "low";
