@@ -305,9 +305,7 @@ export async function adminSetPlan(userId: number, plan: Plan) {
 
 export async function adminRunAgent() {
   await requireAdmin();
-  const { runDueHunts } = await import("@/lib/agent");
-  const users = db.prepare("SELECT user_id FROM search_profiles").all() as { user_id: number }[];
-  for (const u of users) await runHunt(u.user_id);
-  await runDueHunts();
+  const { runAllHunts } = await import("@/lib/agent");
+  await runAllHunts();
   revalidatePath("/admin");
 }
