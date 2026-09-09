@@ -45,6 +45,12 @@ export async function boot() {
   const purged = db.prepare("DELETE FROM opportunities WHERE is_demo = 1").run().changes;
   if (purged) console.log(`[boot] removed ${purged} demo opportunities`);
   await seedDemoUser();
+  // ADMIN_EMAILS is otherwise only consulted at signup, so an address added later would never take effect.
+  // Grant-only: removing an address here does not revoke admin, so a typo can't lock everyone out.
+  for (const addr of (process.env.ADMIN_EMAILS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)) {
+    const r = db.prepare("UPDATE users SET is_admin = 1 WHERE lower(email) = ? AND is_admin = 0").run(addr);
+    if (r.changes) console.log(`[boot] granted admin to ${addr}`);
+  }
   // ponytail: in-process scheduler; swap for an external cron hitting /api/cron/hunt when scaling past one instance
   setInterval(() => runDueHunts().catch((e) => console.error("[agent] scheduled run failed", e)), 15 * 60 * 1000).unref();
 }
