@@ -242,8 +242,11 @@ export async function saveAlerts(_: ActionState, fd: FormData): Promise<ActionSt
     const user = await requireUser();
     const threshold = [70, 75, 80, 85, 90].includes(num(fd, "notification_threshold") ?? 0) ? num(fd, "notification_threshold") : 80;
     const freq = ["daily", "twice_daily", "weekly"].includes(str(fd, "search_frequency")) ? str(fd, "search_frequency") : "daily";
-    db.prepare("UPDATE search_profiles SET notification_threshold = ?, search_frequency = ?, digest_enabled = ?, updated_at = ? WHERE user_id = ?")
-      .run(threshold, freq, fd.get("digest_enabled") ? 1 : 0, now(), user.id);
+    // The digest toggle is disabled for free users, so an absent field must not silently clear their preference.
+    const digest = user.subscription_plan === "pro" ? (fd.get("digest_enabled") ? 1 : 0) : null;
+    db.prepare(`UPDATE search_profiles SET notification_threshold = ?, search_frequency = ?,
+        digest_enabled = COALESCE(?, digest_enabled), updated_at = ? WHERE user_id = ?`)
+      .run(threshold, freq, digest, now(), user.id);
     revalidatePath("/alerts");
     return { ok: "Alert settings saved." };
   });
@@ -259,15 +262,17 @@ export async function updateAccount(_: ActionState, fd: FormData): Promise<Actio
   return guard(async () => {
     const user = await requireUser();
     const name = str(fd, "name", 80);
-    if (name.length < 2) fail("Name is too short.");
-    db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, user.id);
     const pw = str(fd, "new_password", 200);
+    // Validate everything before writing, so a rejected password change can't still commit the name.
+    if (name.length < 2) fail("Name is too short.");
+    let hash: string | null = null;
     if (pw) {
       if (pw.length < 8) fail("New password must be at least 8 characters.");
       const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(user.id) as { password_hash: string | null };
       if (row.password_hash && !verifyPassword(str(fd, "current_password", 200), row.password_hash)) fail("Current password is incorrect.");
-      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(pw), user.id);
+      hash = hashPassword(pw);
     }
+    db.prepare("UPDATE users SET name = ?, password_hash = COALESCE(?, password_hash) WHERE id = ?").run(name, hash, user.id);
     revalidatePath("/", "layout");
     return { ok: "Account updated." };
   });
