@@ -69,7 +69,8 @@ export async function requireAdmin(): Promise<User> {
   return user;
 }
 
+/** Admins come from ADMIN_EMAILS only — never from a hardcoded address with a published password. */
 export function isAdminEmail(email: string) {
-  const list = (process.env.ADMIN_EMAILS ?? "").split(",").map((s) => s.trim().toLowerCase());
-  return email === "demo@opportunityhunter.app" || list.includes(email.toLowerCase());
+  const list = (process.env.ADMIN_EMAILS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return list.includes(email.toLowerCase());
 }

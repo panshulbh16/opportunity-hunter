@@ -4,7 +4,7 @@ import { getUser } from "@/lib/auth";
 import { login } from "@/app/actions";
 import { ActionForm } from "@/components/AuthForm";
 import { GoogleButton } from "../google";
-import { DEMO_EMAIL, DEMO_PASSWORD } from "@/lib/boot";
+import { DEMO_EMAIL, DEMO_PASSWORD, demoEnabled } from "@/lib/boot";
 
 export const metadata = { title: "Log in" };
 
@@ -25,9 +25,11 @@ export default async function Login() {
         <GoogleButton />
       </div>
       <p className="mt-6 text-center text-sm text-zinc-500">New here? <Link href="/signup" className="font-medium text-zinc-900 hover:underline">Create an account</Link></p>
-      <div className="mt-6 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-500">
-        <span className="font-medium text-zinc-700">Demo account:</span> {DEMO_EMAIL} / {DEMO_PASSWORD}
-      </div>
+      {demoEnabled && (
+        <div className="mt-6 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-500">
+          <span className="font-medium text-zinc-700">Demo account:</span> {DEMO_EMAIL} / {DEMO_PASSWORD}
+        </div>
+      )}
     </>
   );
 }

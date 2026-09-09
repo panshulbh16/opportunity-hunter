@@ -5,11 +5,19 @@ import { runDueHunts, runHunt } from "./agent";
 export const DEMO_EMAIL = "demo@opportunityhunter.app";
 export const DEMO_PASSWORD = "demo1234";
 
+/**
+ * The demo account has a published password, so it must never appear on a real deployment by default.
+ * Set SEED_DEMO=true to opt in (for a public demo instance); it is never granted admin in production.
+ */
+const IS_PROD = process.env.NODE_ENV === "production";
+export const demoEnabled = !IS_PROD || process.env.SEED_DEMO === "true";
+
 async function seedDemoUser() {
+  if (!demoEnabled) return;
   if (db.prepare("SELECT 1 FROM users WHERE email = ?").get(DEMO_EMAIL)) return;
   const userId = db
-    .prepare("INSERT INTO users (name, email, password_hash, subscription_plan, is_admin, onboarded) VALUES (?, ?, ?, 'pro', 1, 1)")
-    .run("Demo User", DEMO_EMAIL, hashPassword(DEMO_PASSWORD)).lastInsertRowid;
+    .prepare("INSERT INTO users (name, email, password_hash, subscription_plan, is_admin, onboarded) VALUES (?, ?, ?, 'pro', ?, 1)")
+    .run("Demo User", DEMO_EMAIL, hashPassword(DEMO_PASSWORD), IS_PROD ? 0 : 1).lastInsertRowid;
   db.prepare(`INSERT INTO search_profiles (user_id, roles, skills, keywords, industries, excluded_companies, years_experience, current_role,
       education, seniority, locations, remote_preference, salary_min, currency, employment_types, preferences, notification_threshold, search_frequency)
     VALUES (?, ?, ?, ?, ?, ?, 4, 'AI Engineer', 'B.Tech Computer Science', 'mid', ?, ?, 2000000, 'INR', ?, ?, 80, 'daily')`).run(

@@ -36,6 +36,31 @@ Next.js 15 (App Router, server actions) · SQLite via `better-sqlite3` (file at 
 - **Payments**: `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET`, then implement checkout + webhook in `startUpgrade()` (`src/app/actions.ts`). Nothing is simulated; admins can set plans manually at `/admin`.
 - **Live job listings**: `RAPIDAPI_KEY` enables the JSearch adapter (`src/lib/sources/jsearch.ts`) — a licensed aggregator that includes LinkedIn, Indeed and Glassdoor postings. LinkedIn has no third-party search API and forbids scraping, so this is the legitimate route. Add further adapters in `src/lib/sources/index.ts`.
 
+## Deploying
+
+Needs a **long-running Node server with a persistent disk** — Railway, Render, Fly.io or a VPS. It will *not*
+work on serverless hosts (Vercel, Netlify): the SQLite file would be wiped between invocations and the
+in-process scheduler would never fire.
+
+```bash
+npm ci && npm run build && npm start
+```
+
+Required settings:
+
+| Variable | Why |
+|---|---|
+| `DATABASE_PATH` | Point at a mounted volume, e.g. `/data/app.db`. Anything else is lost on redeploy. |
+| `ADMIN_EMAILS` | Your email. **There is no default admin in production.** |
+| `APP_URL` | Public URL — used in digest links and the Google OAuth callback. |
+
+**Run exactly one instance.** The scheduler and rate limiter live in process, so a second instance would
+double-hunt and halve the rate limits. To scale out, disable the in-process scheduler and drive
+`POST /api/cron/hunt` (Bearer `CRON_SECRET`) from an external scheduler instead.
+
+The demo account is not created in production unless `SEED_DEMO=true`; its password is published in this
+repo, so treat any instance that enables it as public.
+
 ## Future categories
 
 `opportunities.category` and `search_profiles.category` default to `job`. The agent, scoring and UI are category-agnostic apart from job-specific fields, so freelance/scholarship/grant sources can be added as new adapters later.
