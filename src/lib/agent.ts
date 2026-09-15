@@ -4,7 +4,7 @@ import { track } from "./analytics";
 import { email } from "./email";
 import { PLANS, remainingDiscoveries, type Plan } from "./plans";
 import { activeSources } from "./sources";
-import type { SearchQuery } from "./sources/types";
+import type { SearchQuery, SourceAdapter } from "./sources/types";
 import {
   calculateMatchScore, deduplicateOpportunities, generateDailyDigest, generateMatchExplanation, generateSearchQueries,
   normalizeOpportunity, type NormalizedOpportunity, type Opportunity,
@@ -19,13 +19,28 @@ const MAX_LISTING_AGE_DAYS = 45;
 
 export type HuntResult = { retrieved: number; newOpportunities: number; newMatches: number; notified: number; limited: boolean };
 
+/**
+ * Retry transient network failures — a dropped connection otherwise costs a whole scheduled cycle.
+ * Only `fetch` itself failing is retried; an HTTP error (say a 429) would just burn more quota.
+ */
+async function fetchWithRetry(src: SourceAdapter, queries: SearchQuery[], attempts = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await src.fetch(queries);
+    } catch (e) {
+      if (!(e instanceof TypeError) || attempt >= attempts) throw e;
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
+  }
+}
+
 /** Fetch from every configured source and upsert into the opportunities table. Returns count of brand-new rows. */
 async function collect(queries: SearchQuery[]) {
   const all: NormalizedOpportunity[] = [];
   for (const src of activeSources()) {
     const run = db.prepare("INSERT INTO source_runs (source) VALUES (?)").run(src.name).lastInsertRowid;
     try {
-      const raws = await src.fetch(queries);
+      const raws = await fetchWithRetry(src, queries);
       all.push(...raws.map(normalizeOpportunity));
       db.prepare("UPDATE source_runs SET finished_at = ?, retrieved = ?, status = 'ok' WHERE id = ?").run(now(), raws.length, run);
     } catch (e) {
