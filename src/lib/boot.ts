@@ -18,9 +18,10 @@ async function seedDemoUser() {
   const userId = db
     .prepare("INSERT INTO users (name, email, password_hash, subscription_plan, is_admin, onboarded) VALUES (?, ?, ?, 'pro', ?, 1)")
     .run("Demo User", DEMO_EMAIL, hashPassword(DEMO_PASSWORD), IS_PROD ? 0 : 1).lastInsertRowid;
+  // digest_enabled = 0: the demo address is a placeholder domain, so digests to it would bounce daily.
   db.prepare(`INSERT INTO search_profiles (user_id, roles, skills, keywords, industries, excluded_companies, years_experience, current_role,
-      education, seniority, locations, remote_preference, salary_min, currency, employment_types, preferences, notification_threshold, search_frequency)
-    VALUES (?, ?, ?, ?, ?, ?, 4, 'AI Engineer', 'B.Tech Computer Science', 'mid', ?, ?, 2000000, 'INR', ?, ?, 80, 'daily')`).run(
+      education, seniority, locations, remote_preference, salary_min, currency, employment_types, preferences, notification_threshold, search_frequency, digest_enabled)
+    VALUES (?, ?, ?, ?, ?, ?, 4, 'AI Engineer', 'B.Tech Computer Science', 'mid', ?, ?, 2000000, 'INR', ?, ?, 80, 'daily', 0)`).run(
     userId,
     JSON.stringify(["AI Engineer", "Machine Learning Engineer", "Python Developer"]),
     JSON.stringify(["Python", "RAG", "Vector Databases", "LLM", "FastAPI", "PostgreSQL"]),
