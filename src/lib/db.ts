@@ -170,17 +170,18 @@ function open() {
 function hookShutdown() {
   if (g.__closeHooked) return;
   g.__closeHooked = true;
-  for (const signal of ["SIGTERM", "SIGINT"] as const) {
-    process.once(signal, () => {
-      try {
-        g.__db?.close();
-      } catch {
-        // already closed — nothing to salvage on the way out
-      }
-      process.removeAllListeners(signal);
-      process.kill(process.pid, signal);
-    });
-  }
+  const close = () => {
+    try {
+      g.__db?.close();
+    } catch {
+      // already closed — nothing to salvage on the way out
+    }
+  };
+  // 'exit' fires while the environment is still alive, on every exit path — including
+  // process.exit() from another SIGTERM listener, which would otherwise run before ours.
+  process.on("exit", close);
+  // prepend so we close before Next's own signal handler exits the process
+  for (const signal of ["SIGTERM", "SIGINT"] as const) process.prependListener(signal, close);
 }
 
 /**
