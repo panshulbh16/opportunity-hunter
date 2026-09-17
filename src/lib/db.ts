@@ -152,7 +152,7 @@ CREATE TABLE IF NOT EXISTS source_runs (
 );
 `;
 
-const g = globalThis as unknown as { __db?: Database.Database };
+const g = globalThis as unknown as { __db?: Database.Database; __closeHooked?: boolean };
 
 function open() {
   const file = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "app.db");
@@ -165,6 +165,25 @@ function open() {
 }
 
 export const db: Database.Database = g.__db ?? (g.__db = open());
+
+// Close on shutdown so prepared statements are finalized while the V8 environment still exists.
+// Without this, their destructors run after teardown and abort the process ("Assertion failed: (env) != nullptr"),
+// which on a host that sends SIGTERM (Railway, Docker) turns every restart into a crash loop.
+if (!g.__closeHooked) {
+  g.__closeHooked = true;
+  const shutdown = (signal: NodeJS.Signals) => {
+    try {
+      db.close();
+    } catch {
+      // already closed — nothing to salvage on the way out
+    }
+    process.kill(process.pid, signal);
+  };
+  for (const signal of ["SIGTERM", "SIGINT"] as const) process.once(signal, () => {
+    process.removeAllListeners(signal);
+    shutdown(signal);
+  });
+}
 
 export const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 export const json = <T>(s: string | null | undefined, fallback: T): T => {
