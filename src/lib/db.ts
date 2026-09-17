@@ -164,26 +164,45 @@ function open() {
   return d;
 }
 
-export const db: Database.Database = g.__db ?? (g.__db = open());
-
 // Close on shutdown so prepared statements are finalized while the V8 environment still exists.
-// Without this, their destructors run after teardown and abort the process ("Assertion failed: (env) != nullptr"),
-// which on a host that sends SIGTERM (Railway, Docker) turns every restart into a crash loop.
-if (!g.__closeHooked) {
+// Otherwise their destructors run after teardown and abort the process
+// ("Assertion failed: (env) != nullptr"), turning every container stop into a crash.
+function hookShutdown() {
+  if (g.__closeHooked) return;
   g.__closeHooked = true;
-  const shutdown = (signal: NodeJS.Signals) => {
-    try {
-      db.close();
-    } catch {
-      // already closed — nothing to salvage on the way out
-    }
-    process.kill(process.pid, signal);
-  };
-  for (const signal of ["SIGTERM", "SIGINT"] as const) process.once(signal, () => {
-    process.removeAllListeners(signal);
-    shutdown(signal);
-  });
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.once(signal, () => {
+      try {
+        g.__db?.close();
+      } catch {
+        // already closed — nothing to salvage on the way out
+      }
+      process.removeAllListeners(signal);
+      process.kill(process.pid, signal);
+    });
+  }
 }
+
+/**
+ * Opened on first use rather than on import. `next build` imports server modules to collect page
+ * data, so opening eagerly made the *build* create the database and its parallel collectors contend
+ * over it (SQLITE_BUSY). Deferring also means the file is opened after the host has mounted its volume.
+ */
+function handle(): Database.Database {
+  if (!g.__db) {
+    g.__db = open();
+    hookShutdown();
+  }
+  return g.__db;
+}
+
+export const db = new Proxy({} as Database.Database, {
+  get(_target, prop) {
+    const d = handle();
+    const value = Reflect.get(d, prop) as unknown;
+    return typeof value === "function" ? value.bind(d) : value;
+  },
+});
 
 export const now = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 export const json = <T>(s: string | null | undefined, fallback: T): T => {
