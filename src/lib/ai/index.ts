@@ -491,6 +491,67 @@ export function recommendNextAction(score: number, e: Explanation): NextAction {
   return { action: "skip", label: "Skip", reason: "Weak match. Your time is better spent elsewhere." };
 }
 
+export type ApplicationDraft = { letter: string; talkingPoints: string[]; prepare: string[] };
+
+/**
+ * Draft an application the user edits and sends themselves — the app never submits anything.
+ * Anything the profile can't supply is left as a bracketed placeholder rather than invented,
+ * since this goes out under the user's name.
+ */
+export function generateApplicationDraft(
+  name: string,
+  p: Profile,
+  o: NormalizedOpportunity,
+  b: Breakdown,
+  e: Explanation,
+): ApplicationDraft {
+  const list = (a: string[]) => (a.length <= 2 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
+  const top = b.matchedSkills.slice(0, 3);
+  const role = p.current_role || "engineer";
+  const years = p.years_experience;
+
+  const lines = [`Hi ${o.company} team,`, ""];
+  const article = /^[aeiou]/i.test(role) ? "an" : "a";
+  const intro = `I'm applying for the ${o.title} role. I'm ${article} ${role}${years ? ` with ${years} ${years === 1 ? "year" : "years"} of experience` : ""}`;
+  // With no overlapping skills there is nothing true to claim, so say nothing rather than assert a fit.
+  lines.push(top.length ? `${intro}, and I work day to day with ${list(top)}.` : `${intro}.`);
+  lines.push("");
+  if (top.length) {
+    lines.push(`A couple of specifics: [one line on a project where you used ${top[0]} — what you built and the outcome].`);
+    if (top[1]) lines.push(`[one line on ${top[1]} — ideally something measurable].`);
+    lines.push("");
+  }
+  // Address a missing *requirement* head-on — unacknowledged, it reads worse. Never volunteer a
+  // weakness about a nice-to-have; that's talking yourself down over something optional.
+  const gap = b.missingSkills[0];
+  if (gap) {
+    lines.push(`I haven't worked with ${gap} in production, though [note the closest thing you have done, or how quickly you picked up something comparable]. Happy to talk through it.`);
+    lines.push("");
+  }
+  if (o.remote_type === "remote" && p.remote_preference.includes("remote")) lines.push("I'm set up to work remotely and used to async collaboration.");
+  else if (b.locHit) lines.push(`I'm based in ${p.locations[0]}, so the location works well.`);
+  lines.push("", "Thanks for your time,", name);
+  const letter = lines.join("\n").replace(/\n{3,}/g, "\n\n");
+
+  const talkingPoints = [
+    top[0] ? `${top[0]} — have a concrete example ready: what you built and the outcome` : null,
+    top.length > 1 ? `Also be ready to speak to ${list(top.slice(1))}` : null,
+    b.role_score >= 80 && b.matchedRole ? `Title maps to your target: ${b.matchedRole}` : null,
+    years >= o.min_years && o.min_years > 0 ? `Meets the ${o.min_years}+ years requirement (you have ${years})` : null,
+    o.company_type === "startup" ? "Startup — expect questions on ownership and moving without process" : null,
+    o.company_type === "product" ? "Product company — expect questions on users and trade-offs, not just delivery" : null,
+  ].filter((x): x is string => Boolean(x));
+
+  const prepare = [
+    ...b.missingSkills.slice(0, 3).map((s) => `${s} is required — be ready to say honestly where you are with it`),
+    ...b.missingNice.slice(0, 2).map((s) => `${s} is a nice-to-have — worth a sentence if you've touched it`),
+    e.difficulty === "high" ? "Rigorous fit: lead with the overlap early in the conversation" : null,
+    o.salary_min == null ? "Pay isn't listed — decide your number before they ask" : null,
+  ].filter((x): x is string => Boolean(x));
+
+  return { letter, talkingPoints, prepare };
+}
+
 export function generateDailyDigest(
   name: string,
   matches: { id: number; title: string; company: string; score: number }[],

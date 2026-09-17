@@ -1,7 +1,7 @@
 // Self-check for the matching engine: `npm run check`. Fails loudly if scoring/dedupe/parsing regress.
 import assert from "node:assert/strict";
 import {
-  calculateMatchScore, deduplicateOpportunities, generateMatchExplanation, normalizeOpportunity, parseSalary,
+  calculateMatchScore, deduplicateOpportunities, generateApplicationDraft, generateMatchExplanation, normalizeOpportunity, parseSalary,
   parseSearchProfile, recommendNextAction, type Profile,
 } from "./index.ts";
 import { demoSource } from "../sources/demo.ts";
@@ -51,6 +51,25 @@ const abroad = byTitle("Machine Learning Engineer — Computer Vision"); // Sing
 const ge = generateMatchExplanation(globalProfile, abroad, calculateMatchScore(globalProfile, abroad));
 assert.ok(!ge.gaps.some((g) => g.includes("outside your locations")), "global scope is not 'outside your locations'");
 assert.ok(calculateMatchScore(globalProfile, abroad).location_score > calculateMatchScore(profile, abroad).location_score, "global scope scores above a plain mismatch");
+
+// Application draft: uses real profile facts, never invents achievements.
+const flagship = byTitle("Senior Python AI Engineer");
+const fb = score("Senior Python AI Engineer");
+const draft = generateApplicationDraft("Asha Rao", profile, flagship, fb, generateMatchExplanation(profile, flagship, fb));
+assert.ok(draft.letter.includes("Northwind Labs") && draft.letter.includes("Senior Python AI Engineer"), "names the company and role");
+assert.ok(draft.letter.endsWith("Asha Rao"), "signs off with the applicant's name");
+assert.ok(draft.letter.includes("Python"), "cites a genuinely matched skill");
+assert.ok(/\[[^\]]+\]/.test(draft.letter), "leaves placeholders instead of inventing specifics");
+assert.ok(draft.prepare.some((p) => p.includes("AWS") || p.includes("Kubernetes")), "flags the real gaps to prepare for");
+const noSalary = { ...flagship, salary_min: null, salary_max: null };
+assert.ok(generateApplicationDraft("Asha Rao", profile, noSalary, calculateMatchScore(profile, noSalary), generateMatchExplanation(profile, noSalary, calculateMatchScore(profile, noSalary)))
+  .prepare.some((p) => p.includes("Pay isn't listed")), "undisclosed pay becomes a prep note");
+// A poor match must not assert a fit that isn't there, and must not apologise for optional skills.
+const weak = byTitle("Senior Backend Engineer (Go)");
+const wd = generateApplicationDraft("Asha Rao", profile, weak, score("Senior Backend Engineer (Go)"), generateMatchExplanation(profile, weak, score("Senior Backend Engineer (Go)")));
+assert.ok(!/line up closely/.test(wd.letter), "no invented claim of fit when nothing matches");
+assert.ok(!/\n{3,}/.test(wd.letter), "no stray blank runs");
+assert.ok(!/haven't worked with (AWS|Kubernetes) in production/.test(draft.letter), "never volunteers weakness about a nice-to-have");
 
 assert.deepEqual(parseSalary("₹25–35 LPA"), { salary_min: 2500000, salary_max: 3500000, currency: "INR", salary_period: "year" });
 assert.deepEqual(parseSalary("$90k–130k"), { salary_min: 90000, salary_max: 130000, currency: "USD", salary_period: "year" });

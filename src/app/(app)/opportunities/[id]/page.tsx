@@ -4,7 +4,9 @@ import { requireUser } from "@/lib/auth";
 import { db, now } from "@/lib/db";
 import { getMatch, type MatchRow } from "@/lib/queries";
 import { evaluateForUser } from "@/lib/agent";
-import { formatSalary, recommendNextAction } from "@/lib/ai";
+import { calculateMatchScore, formatSalary, generateApplicationDraft, recommendNextAction, type ApplicationDraft } from "@/lib/ai";
+import { getProfile } from "@/lib/queries";
+import { ApplicationDraftPanel } from "@/components/ApplicationDraft";
 import { PLANS } from "@/lib/plans";
 import { track } from "@/lib/analytics";
 import { Check, ScoreBadge, Warn, scoreTone, timeAgo, titleCase } from "@/components/ui";
@@ -33,6 +35,11 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
   }
   track("opportunity_viewed", user.id, { oppId: o.id, score: m?.score ?? null });
   const applied = ["applied", "interview", "offer"].includes(m?.application_status ?? "");
+
+  // Only draftable once the listing has been scored for this user — the draft leans on the match breakdown.
+  let draft: ApplicationDraft | null = null;
+  const profile = m ? getProfile(user.id) : null;
+  if (m && profile) draft = generateApplicationDraft(user.name, profile, o, calculateMatchScore(profile, o), m.explanation);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -67,6 +74,8 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
             </div>
             <a href={o.source_url} target="_blank" rel="noopener noreferrer" className="mt-5 inline-block text-sm text-zinc-500 underline decoration-zinc-300 underline-offset-4 hover:text-zinc-900">View original listing ↗</a>
           </div>
+
+          {draft && <ApplicationDraftPanel draft={draft} />}
         </div>
 
         <aside className="space-y-4">
