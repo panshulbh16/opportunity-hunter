@@ -58,7 +58,7 @@ export default async function Admin() {
 
       <h2 className="mt-10 mb-3 text-base font-semibold text-zinc-900">Integrations</h2>
       <div className="grid gap-3 sm:grid-cols-3">
-        {[["Email (Resend)", emailConfigured, "RESEND_API_KEY"], ["Payments (Razorpay)", paymentsConfigured, "RAZORPAY_KEY_ID / _SECRET"], ["Google login", Boolean(process.env.GOOGLE_CLIENT_ID), "GOOGLE_CLIENT_ID / _SECRET"]].map(([l, ok, env]) => (
+        {[["Email", emailConfigured, "GMAIL_USER / _APP_PASSWORD"], ["Payments (Razorpay)", paymentsConfigured, "RAZORPAY_KEY_ID / _SECRET"], ["Google login", Boolean(process.env.GOOGLE_CLIENT_ID), "GOOGLE_CLIENT_ID / _SECRET"]].map(([l, ok, env]) => (
           <div key={String(l)} className="card p-4"><p className="text-sm font-medium text-zinc-900">{l}</p><p className={`mt-1 text-xs font-semibold ${ok ? "text-emerald-700" : "text-zinc-500"}`}>{ok ? "Configured" : `Not configured · set ${env}`}</p></div>
         ))}
       </div>

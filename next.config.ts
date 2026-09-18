@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["better-sqlite3", "nodemailer"],
   outputFileTracingRoot: __dirname,
   // Baseline hardening for a public site accepting logins. HSTS is left to Railway's TLS proxy.
   async headers() {

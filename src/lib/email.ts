@@ -31,15 +31,33 @@ const resendProvider = (key: string): EmailProvider => ({
   },
 });
 
-export const email: EmailProvider = process.env.RESEND_API_KEY
-  ? resendProvider(process.env.RESEND_API_KEY)
-  : consoleProvider;
+/**
+ * Gmail over SMTP with an app password. Free, delivers to any recipient, and needs no domain —
+ * so it, unlike unverified Resend, can serve real users' password resets. ~500 recipients/day on a
+ * free account. nodemailer is imported lazily so the console/Resend paths don't pull it in.
+ */
+const gmailProvider = (user: string, pass: string): EmailProvider => ({
+  name: "gmail",
+  async send(e) {
+    const nodemailer = (await import("nodemailer")).default;
+    const transport = nodemailer.createTransport({ service: "gmail", auth: { user, pass } });
+    await transport.sendMail({ from: process.env.EMAIL_FROM ?? `Opportunity Hunter <${user}>`, to: e.to, subject: e.subject, text: e.text, html: e.html });
+  },
+});
+
+export const email: EmailProvider =
+  process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD
+    ? gmailProvider(process.env.GMAIL_USER, process.env.GMAIL_APP_PASSWORD)
+    : process.env.RESEND_API_KEY
+      ? resendProvider(process.env.RESEND_API_KEY)
+      : consoleProvider;
 
 export const emailConfigured = email.name !== "console";
 
 /**
- * Resend only delivers to the account owner until a domain is verified, and EMAIL_FROM is only set
- * once one is (it must be an address on that domain). Until then, self-service password reset
- * can't reach users, so the app falls back to a manual reset via support.
+ * Whether the app can reach ARBITRARY users (so self-service password reset works), vs only the owner.
+ * - Gmail SMTP: yes, to anyone.
+ * - Resend: only once a domain is verified, which is exactly when EMAIL_FROM gets set.
+ * Otherwise the reset page falls back to the manual, support-assisted flow.
  */
-export const canEmailAnyone = emailConfigured && Boolean(process.env.EMAIL_FROM);
+export const canEmailAnyone = email.name === "gmail" || (email.name === "resend" && Boolean(process.env.EMAIL_FROM));
