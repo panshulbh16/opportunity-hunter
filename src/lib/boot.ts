@@ -1,6 +1,34 @@
-import { db } from "./db";
+import fs from "node:fs";
+import path from "node:path";
+import { DATABASE_FILE, db } from "./db";
 import { hashPassword } from "./password";
 import { runDueHunts, runHunt } from "./agent";
+
+const BACKUPS_KEPT = 7;
+
+/**
+ * Daily consistent snapshot (VACUUM INTO is safe while the app is writing), keeping the last week.
+ * These live on the same volume, so they cover bad deploys and accidental deletes — not losing the
+ * volume itself; for that, enable Railway's volume backups or download a copy off-site.
+ */
+function backupDatabase() {
+  const dir = path.join(path.dirname(DATABASE_FILE), "backups");
+  fs.mkdirSync(dir, { recursive: true });
+  const target = path.join(dir, `app-${new Date().toISOString().slice(0, 10)}.db`);
+  if (fs.existsSync(target)) return;
+  db.prepare("VACUUM INTO ?").run(target);
+  const snapshots = fs.readdirSync(dir).filter((f) => /^app-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort();
+  for (const old of snapshots.slice(0, -BACKUPS_KEPT)) fs.unlinkSync(path.join(dir, old));
+  console.log(`[backup] wrote ${path.basename(target)}`);
+}
+
+function safeBackup() {
+  try {
+    backupDatabase();
+  } catch (e) {
+    console.error("[backup] failed", e);
+  }
+}
 
 export const DEMO_EMAIL = "demo@opportunityhunter.app";
 export const DEMO_PASSWORD = "demo1234";
@@ -52,6 +80,10 @@ export async function boot() {
     const r = db.prepare("UPDATE users SET is_admin = 1 WHERE lower(email) = ? AND is_admin = 0").run(addr);
     if (r.changes) console.log(`[boot] granted admin to ${addr}`);
   }
+  safeBackup();
   // ponytail: in-process scheduler; swap for an external cron hitting /api/cron/hunt when scaling past one instance
-  setInterval(() => runDueHunts().catch((e) => console.error("[agent] scheduled run failed", e)), 15 * 60 * 1000).unref();
+  setInterval(() => {
+    safeBackup(); // no-op unless today's snapshot is missing
+    runDueHunts().catch((e) => console.error("[agent] scheduled run failed", e));
+  }, 15 * 60 * 1000).unref();
 }

@@ -31,8 +31,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
       {user.subscription_plan === "free" && (
         <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${remaining === 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-zinc-200 bg-white text-zinc-600"}`}>
-          <span>{remaining === 0 ? `You've used your ${PLANS.free.weeklyDiscoveries} free opportunities this week.` : `Free plan: ${remaining} of ${PLANS.free.weeklyDiscoveries} opportunity discoveries left this week.`}</span>
-          <Link href="/pricing" className="btn-accent btn-sm">Upgrade to Pro</Link>
+          <span>{remaining === 0 ? `You've seen this week's ${PLANS.free.weeklyDiscoveries} new opportunities — more arrive as your weekly allowance frees up.` : `${remaining} of ${PLANS.free.weeklyDiscoveries} new opportunities left this week.`}</span>
         </div>
       )}
 

@@ -286,7 +286,12 @@ export async function updateAccount(_: ActionState, fd: FormData): Promise<Actio
 
 export async function deleteAccount() {
   const user = await requireUser();
-  db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
+  // events has no FK to users (it outlives sessions for analytics), so it doesn't cascade — delete explicitly,
+  // or the privacy page's promise that deletion removes your data would be false.
+  db.transaction(() => {
+    db.prepare("DELETE FROM events WHERE user_id = ?").run(user.id);
+    db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
+  })();
   await destroySession();
   redirect("/");
 }

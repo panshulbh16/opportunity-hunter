@@ -128,7 +128,7 @@ export default async function Landing() {
       <footer className="border-t border-zinc-100">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-zinc-500">
           <Logo className="text-sm" />
-          <div className="flex gap-6"><Link href="/pricing" className="hover:text-zinc-900">Pricing</Link><Link href="/login" className="hover:text-zinc-900">Log in</Link></div>
+          <div className="flex gap-6"><Link href="/pricing" className="hover:text-zinc-900">Pricing</Link><Link href="/privacy" className="hover:text-zinc-900">Privacy &amp; Terms</Link><Link href="/login" className="hover:text-zinc-900">Log in</Link></div>
         </div>
       </footer>
     </div>

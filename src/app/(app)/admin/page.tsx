@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
 import { adminStats } from "@/lib/queries";
+import { apiUsage } from "@/lib/agent";
 import { sources } from "@/lib/sources";
 import { emailConfigured } from "@/lib/email";
 import { paymentsConfigured } from "@/lib/plans";
@@ -11,6 +12,7 @@ export const metadata = { title: "Admin" };
 export default async function Admin() {
   await requireAdmin();
   const s = adminStats();
+  const usage = apiUsage();
   const cards = [["Total users", s.users], ["Free users", s.free], ["Pro users", s.pro], ["Opportunities discovered", s.opportunities], ["Opportunities matched", s.matched], ["Applications tracked", s.applications], ["Daily active users", s.dau]] as const;
   const runs = new Map(s.sourceRuns.map((r) => [r.source, r]));
   return (
@@ -40,6 +42,18 @@ export default async function Admin() {
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-4 card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+        <div>
+          <p className="font-medium text-zinc-900">Job API budget this month</p>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            Pool refreshes at most every {usage.refreshHours}h{usage.lastRefresh ? ` · last ${timeAgo(usage.lastRefresh)}` : ""}. When the budget runs out, users keep being matched against the existing pool until the month resets.
+          </p>
+        </div>
+        <p className={`text-lg font-semibold tabular-nums ${usage.callsThisMonth >= usage.budget * 0.9 ? "text-red-600" : "text-zinc-900"}`}>
+          {usage.callsThisMonth} / {usage.budget}
+        </p>
       </div>
 
       <h2 className="mt-10 mb-3 text-base font-semibold text-zinc-900">Integrations</h2>

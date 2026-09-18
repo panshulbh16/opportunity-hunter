@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
           <div className="flex items-center gap-2">
-            {user.subscription_plan === "free" ? <Link href="/pricing" className="btn-accent btn-sm hidden sm:inline-flex">Upgrade to Pro</Link> : <span className="chip bg-zinc-900 text-white">Pro</span>}
+            {user.subscription_plan === "pro" && <span className="chip bg-zinc-900 text-white">Pro</span>}
             <details className="relative">
               <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-zinc-100">
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-indigo-600 text-xs font-semibold text-white">{user.name.slice(0, 1).toUpperCase()}</span>

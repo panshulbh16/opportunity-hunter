@@ -11,7 +11,6 @@ import { PLANS } from "@/lib/plans";
 import { track } from "@/lib/analytics";
 import { Check, ScoreBadge, Warn, scoreTone, timeAgo, titleCase } from "@/components/ui";
 import { OppActions } from "@/components/OppActions";
-import { UpgradeButton } from "@/components/UpgradeButton";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const id = parseInt((await params).id);
@@ -83,9 +82,8 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
             <div className="card p-5 rise-in">
               <h2 className="text-sm font-semibold text-zinc-900">Not scored for you yet</h2>
               <p className="mt-2 text-[13px] text-zinc-600">
-                The agent scores {PLANS.free.weeklyDiscoveries} discoveries a week on the Free plan and picks the strongest ones. Pro scores every listing it gathers, with the full breakdown, explanation and next-step advice.
+                Each week the agent scores your {PLANS.free.weeklyDiscoveries} strongest new matches in full. This listing wasn&apos;t among them, but you can still view and apply to it.
               </p>
-              <div className="mt-4"><UpgradeButton /></div>
             </div>
           )}
         </aside>

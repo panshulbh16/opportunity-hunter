@@ -154,8 +154,10 @@ CREATE TABLE IF NOT EXISTS source_runs (
 
 const g = globalThis as unknown as { __db?: Database.Database; __closeHooked?: boolean };
 
+export const DATABASE_FILE = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "app.db");
+
 function open() {
-  const file = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "app.db");
+  const file = DATABASE_FILE;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const d = new Database(file);
   d.pragma("journal_mode = WAL");
