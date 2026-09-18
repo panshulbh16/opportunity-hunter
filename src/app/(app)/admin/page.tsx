@@ -5,7 +5,7 @@ import { sources } from "@/lib/sources";
 import { emailConfigured } from "@/lib/email";
 import { paymentsConfigured } from "@/lib/plans";
 import { PageHeader, timeAgo } from "@/components/ui";
-import { AdminActions, PlanToggle } from "@/components/AdminActions";
+import { AdminActions, PlanToggle, ResetLink } from "@/components/AdminActions";
 
 export const metadata = { title: "Admin" };
 
@@ -65,10 +65,10 @@ export default async function Admin() {
 
       <div className="mt-10 grid gap-6 lg:grid-cols-[1fr_320px]">
         <div>
-          <h2 className="mb-3 text-base font-semibold text-zinc-900">Recent users</h2>
+          <h2 className="mb-3 text-base font-semibold text-zinc-900">Users</h2>
           <div className="card overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-4 py-2.5">User</th><th className="px-4 py-2.5">Plan</th><th className="px-4 py-2.5">Joined</th><th className="px-4 py-2.5">Last active</th></tr></thead>
+              <thead className="bg-zinc-50 text-left text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-4 py-2.5">User</th><th className="px-4 py-2.5">Plan</th><th className="px-4 py-2.5">Joined</th><th className="px-4 py-2.5">Last active</th><th className="px-4 py-2.5">Password</th></tr></thead>
               <tbody className="divide-y divide-zinc-100">
                 {s.recentUsers.map((u) => (
                   <tr key={u.id}>
@@ -76,6 +76,7 @@ export default async function Admin() {
                     <td className="px-4 py-2.5"><PlanToggle userId={u.id} plan={u.subscription_plan as "free" | "pro"} /></td>
                     <td className="px-4 py-2.5 text-zinc-600">{timeAgo(u.created_at)}</td>
                     <td className="px-4 py-2.5 text-zinc-600">{u.last_active_at ? timeAgo(u.last_active_at) : "—"}</td>
+                    <td className="px-4 py-2.5"><ResetLink userId={u.id} email={u.email} /></td>
                   </tr>
                 ))}
               </tbody>

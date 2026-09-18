@@ -319,6 +319,20 @@ export async function adminSetPlan(userId: number, plan: Plan) {
   revalidatePath("/admin");
 }
 
+/**
+ * Manual password reset while email can't reach users: the admin generates a link and sends it from the
+ * support inbox. Only do this for a request that came *from* the account's own address — that reply is the
+ * sole proof of ownership. Valid 24h, since a manual round-trip is slower than an automated email.
+ */
+export async function adminCreateResetLink(userId: number): Promise<{ url?: string; error?: string }> {
+  const admin = await requireAdmin();
+  if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(userId)) return { error: "User not found" };
+  const t = token();
+  db.prepare("INSERT INTO password_resets (token, user_id, expires_at) VALUES (?, ?, ?)").run(t, userId, new Date(Date.now() + 24 * 36e5).toISOString());
+  track("password_reset_issued", admin.id, { forUser: userId });
+  return { url: `${process.env.APP_URL ?? "http://localhost:3000"}/reset-password?token=${t}` };
+}
+
 export async function adminRunAgent() {
   await requireAdmin();
   const { runAllHunts } = await import("@/lib/agent");

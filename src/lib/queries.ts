@@ -134,7 +134,8 @@ export function adminStats() {
         (SELECT status FROM source_runs r2 WHERE r2.source = r.source ORDER BY id DESC LIMIT 1) AS status,
         (SELECT error FROM source_runs r3 WHERE r3.source = r.source ORDER BY id DESC LIMIT 1) AS error
       FROM source_runs r GROUP BY source`).all() as { source: string; last_ok: string | null; retrieved: number; status: string; error: string | null }[],
-    recentUsers: db.prepare("SELECT id, name, email, subscription_plan, created_at, last_active_at FROM users ORDER BY id DESC LIMIT 20").all() as
+    // ponytail: listing every user is fine at early-access scale; add search past a few hundred
+    recentUsers: db.prepare("SELECT id, name, email, subscription_plan, created_at, last_active_at FROM users ORDER BY id DESC LIMIT 500").all() as
       { id: number; name: string; email: string; subscription_plan: string; created_at: string; last_active_at: string | null }[],
     events: db.prepare("SELECT name, COUNT(*) n FROM events WHERE created_at > datetime('now', '-7 days') GROUP BY name ORDER BY n DESC").all() as { name: string; n: number }[],
   };

@@ -36,3 +36,10 @@ export const email: EmailProvider = process.env.RESEND_API_KEY
   : consoleProvider;
 
 export const emailConfigured = email.name !== "console";
+
+/**
+ * Resend only delivers to the account owner until a domain is verified, and EMAIL_FROM is only set
+ * once one is (it must be an address on that domain). Until then, self-service password reset
+ * can't reach users, so the app falls back to a manual reset via support.
+ */
+export const canEmailAnyone = emailConfigured && Boolean(process.env.EMAIL_FROM);
