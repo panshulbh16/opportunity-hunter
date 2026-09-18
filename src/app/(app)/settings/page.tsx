@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
-import { PLANS, remainingDiscoveries } from "@/lib/plans";
+import { PLANS, proUntil, remainingDiscoveries } from "@/lib/plans";
 import { deleteAccount, updateAccount } from "@/app/actions";
 import { Check, PageHeader } from "@/components/ui";
 import { ActionForm } from "@/components/AuthForm";
@@ -12,6 +12,7 @@ export default async function Settings() {
   const user = await requireUser();
   const plan = PLANS[user.subscription_plan];
   const remaining = remainingDiscoveries(user.id, user.subscription_plan);
+  const until = user.subscription_plan === "pro" ? proUntil(user.id) : null;
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader title="Settings" />
@@ -20,9 +21,9 @@ export default async function Settings() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className="text-base font-semibold text-zinc-900">Subscription</h2>
-              <p className="mt-1 text-sm text-zinc-500">You&apos;re on the <span className="font-medium text-zinc-800">{plan.name}</span> plan{user.subscription_plan === "free" ? ` · ${remaining} of ${plan.weeklyDiscoveries} discoveries left this week` : ""}.</p>
+              <p className="mt-1 text-sm text-zinc-500">You&apos;re on the <span className="font-medium text-zinc-800">{plan.name}</span> plan{user.subscription_plan === "free" ? ` · ${remaining} of ${plan.weeklyDiscoveries} discoveries left this week` : until ? ` until ${new Date(until.replace(" ", "T") + "Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}` : ""}.</p>
             </div>
-            {user.subscription_plan === "free" ? <UpgradeButton /> : <Link href="/pricing" className="btn-secondary">Manage plan</Link>}
+            {user.subscription_plan === "free" ? <UpgradeButton /> : until ? <UpgradeButton label="Add 30 days" /> : <Link href="/pricing" className="btn-secondary">Manage plan</Link>}
           </div>
           <ul className="mt-5 grid gap-2 text-sm text-zinc-700 sm:grid-cols-2">
             {plan.features.map((f) => <li key={f} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 text-emerald-600" />{f}</li>)}
