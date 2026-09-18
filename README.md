@@ -33,7 +33,7 @@ Next.js 15 (App Router, server actions) · SQLite via `better-sqlite3` (file at 
 
 - **Google login**: `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`. Button appears automatically.
 - **Email**: `RESEND_API_KEY`. Otherwise digests and reset links print to the server console.
-- **Payments**: `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET`, then implement checkout + webhook in `startUpgrade()` (`src/app/actions.ts`). Nothing is simulated; admins can set plans manually at `/admin`.
+- **Payments**: `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` turn on checkout. Pro is a 30-day pass (₹499, no auto-renew; buying again stacks), expired every 15 min in `boot.ts`. Add a Razorpay webhook to `/api/razorpay/webhook` for event `order.paid` with secret `RAZORPAY_WEBHOOK_SECRET`, so buyers who close the tab mid-payment still get Pro. Logic in `src/lib/razorpay.ts`; admins can still set plans manually at `/admin`.
 - **Live job listings**: `RAPIDAPI_KEY` enables the JSearch adapter (`src/lib/sources/jsearch.ts`) — a licensed aggregator that includes LinkedIn, Indeed and Glassdoor postings. LinkedIn has no third-party search API and forbids scraping, so this is the legitimate route. Add further adapters in `src/lib/sources/index.ts`.
 
 ## Deploying

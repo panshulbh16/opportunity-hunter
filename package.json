@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "check": "tsc --noEmit && node --experimental-strip-types src/lib/ai/check.ts"
+    "check": "tsc --noEmit && node --experimental-strip-types src/lib/ai/check.ts && node --experimental-strip-types src/lib/billing-check.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

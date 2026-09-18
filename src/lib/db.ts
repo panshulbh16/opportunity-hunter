@@ -141,6 +141,17 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_events_name ON events(name, created_at);
+CREATE TABLE IF NOT EXISTS orders (
+  id TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'created',
+  payment_id TEXT,
+  pro_until TEXT,
+  paid_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, status);
 CREATE TABLE IF NOT EXISTS source_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source TEXT NOT NULL,

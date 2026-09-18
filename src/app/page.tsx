@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getUser } from "@/lib/auth";
 import { Check, Logo, ScoreBadge, Warn } from "@/components/ui";
+import { LEGAL_LINKS } from "@/components/LegalPage";
 
 const STEPS = [
   ["Tell us what you want", "Roles, skills, location, salary and the kind of company you'd join. Two minutes, once."],
@@ -128,7 +129,7 @@ export default async function Landing() {
       <footer className="border-t border-zinc-100">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-sm text-zinc-500">
           <Logo className="text-sm" />
-          <div className="flex gap-6"><Link href="/pricing" className="hover:text-zinc-900">Pricing</Link><Link href="/privacy" className="hover:text-zinc-900">Privacy &amp; Terms</Link><Link href="/login" className="hover:text-zinc-900">Log in</Link></div>
+          <div className="flex flex-wrap gap-x-6 gap-y-2"><Link href="/pricing" className="hover:text-zinc-900">Pricing</Link>{LEGAL_LINKS.map(([href, label]) => <Link key={href} href={href} className="hover:text-zinc-900">{label}</Link>)}<Link href="/login" className="hover:text-zinc-900">Log in</Link></div>
         </div>
       </footer>
     </div>

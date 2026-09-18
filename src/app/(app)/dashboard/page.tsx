@@ -5,6 +5,7 @@ import { PLANS, remainingDiscoveries } from "@/lib/plans";
 import { EmptyState, PageHeader, timeAgo } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { RunSearchButton } from "@/components/RunSearchButton";
+import { UpgradeButton } from "@/components/UpgradeButton";
 
 export const metadata = { title: "Dashboard" };
 
@@ -32,6 +33,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       {user.subscription_plan === "free" && (
         <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${remaining === 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-zinc-200 bg-white text-zinc-600"}`}>
           <span>{remaining === 0 ? `You've seen this week's ${PLANS.free.weeklyDiscoveries} new opportunities — more arrive as your weekly allowance frees up.` : `${remaining} of ${PLANS.free.weeklyDiscoveries} new opportunities left this week.`}</span>
+          <UpgradeButton label="Get unlimited with Pro" />
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from "./db.ts";
 
 const FREE_WEEKLY = 15;
 
@@ -44,3 +44,14 @@ export function remainingDiscoveries(userId: number, plan: Plan) {
 }
 
 export const paymentsConfigured = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+
+/** End of the user's paid Pro time (UTC, "YYYY-MM-DD HH:MM:SS"), or null if they never bought a pass. */
+export function proUntil(userId: number) {
+  return (db.prepare("SELECT max(pro_until) AS t FROM orders WHERE user_id = ? AND status = 'paid'").get(userId) as { t: string | null }).t;
+}
+
+/** Drops paid users back to Free once their last pass runs out. Admin-granted Pro (no orders) is left alone. */
+export function expireLapsedPasses() {
+  return db.prepare(`UPDATE users SET subscription_plan = 'free' WHERE subscription_plan = 'pro' AND id IN
+    (SELECT user_id FROM orders WHERE status = 'paid' GROUP BY user_id HAVING max(pro_until) < datetime('now'))`).run().changes;
+}

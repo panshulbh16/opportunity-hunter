@@ -3,6 +3,7 @@ import path from "node:path";
 import { DATABASE_FILE, db } from "./db";
 import { hashPassword } from "./password";
 import { runDueHunts, runHunt } from "./agent";
+import { expireLapsedPasses } from "./plans";
 
 const BACKUPS_KEPT = 7;
 
@@ -27,6 +28,15 @@ function safeBackup() {
     backupDatabase();
   } catch (e) {
     console.error("[backup] failed", e);
+  }
+}
+
+function expirePasses() {
+  try {
+    const n = expireLapsedPasses();
+    if (n) console.log(`[billing] ${n} Pro pass(es) ran out, moved to Free`);
+  } catch (e) {
+    console.error("[billing] expiry check failed", e);
   }
 }
 
@@ -81,9 +91,11 @@ export async function boot() {
     if (r.changes) console.log(`[boot] granted admin to ${addr}`);
   }
   safeBackup();
+  expirePasses();
   // ponytail: in-process scheduler; swap for an external cron hitting /api/cron/hunt when scaling past one instance
   setInterval(() => {
     safeBackup(); // no-op unless today's snapshot is missing
+    expirePasses();
     runDueHunts().catch((e) => console.error("[agent] scheduled run failed", e));
   }, 15 * 60 * 1000).unref();
 }

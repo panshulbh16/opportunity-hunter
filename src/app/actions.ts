@@ -11,6 +11,7 @@ import { email } from "@/lib/email";
 import { refreshPool, runHunt } from "@/lib/agent";
 import { PLANS, paymentsConfigured, type Plan } from "@/lib/plans";
 import { getProfile } from "@/lib/queries";
+import { createOrder, markOrderPaid, paymentSignatureValid } from "@/lib/razorpay";
 
 export type ActionState = { error?: string; ok?: string } | undefined;
 
@@ -298,14 +299,28 @@ export async function deleteAccount() {
 
 // ---------- Billing ----------
 
-export async function startUpgrade(): Promise<ActionState> {
+export type Checkout = { orderId: string; amount: number; keyId: string; name: string; email: string };
+
+export async function startUpgrade(): Promise<Checkout | { error: string }> {
   return guard(async () => {
     const user = await requireUser();
     track("upgrade_clicked", user.id, { plan: "pro", paymentsConfigured });
-    if (!paymentsConfigured) return { error: "not_configured" };
-    // Integration point: create a Razorpay subscription/order here, return its id, and open Checkout on the client.
-    // On the webhook (payment.captured / subscription.activated), set users.subscription_plan = 'pro' and track subscription_started.
-    return { error: "Razorpay checkout is not implemented yet. See src/app/actions.ts startUpgrade()." };
+    if (!paymentsConfigured) fail("Pro isn't on sale yet.");
+    await rateLimit("upgrade", 10, 300);
+    const { orderId, amount } = await createOrder(user.id);
+    return { orderId, amount, keyId: process.env.RAZORPAY_KEY_ID!, name: user.name, email: user.email };
+  });
+}
+
+/** Checkout's success callback. The webhook grants the same pass if the tab closes before this runs. */
+export async function confirmUpgrade(orderId: string, paymentId: string, signature: string): Promise<ActionState> {
+  return guard(async () => {
+    await requireUser();
+    if (!paymentSignatureValid(String(orderId), String(paymentId), String(signature)))
+      fail("We couldn't verify that payment. If you were charged, email us and we'll sort it out.");
+    markOrderPaid(orderId, paymentId); // grants to the order's owner, not the caller
+    revalidatePath("/", "layout");
+    return { ok: "You're on Pro." };
   });
 }
 

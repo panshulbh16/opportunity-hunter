@@ -21,7 +21,7 @@ export default async function Signup() {
         </ActionForm>
         <GoogleButton />
       </div>
-      <p className="mt-4 text-center text-xs text-zinc-400">By creating an account you agree to our <Link href="/privacy" className="underline hover:text-zinc-700">Privacy &amp; Terms</Link>.</p>
+      <p className="mt-4 text-center text-xs text-zinc-400">By creating an account you agree to our <Link href="/terms" className="underline hover:text-zinc-700">Terms</Link> and <Link href="/privacy" className="underline hover:text-zinc-700">Privacy Policy</Link>.</p>
       <p className="mt-6 text-center text-sm text-zinc-500">Already have an account? <Link href="/login" className="font-medium text-zinc-900 hover:underline">Log in</Link></p>
     </>
   );
