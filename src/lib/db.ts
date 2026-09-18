@@ -166,9 +166,9 @@ function open() {
   return d;
 }
 
-// Close on shutdown so prepared statements are finalized while the V8 environment still exists.
-// Otherwise their destructors run after teardown and abort the process
-// ("Assertion failed: (env) != nullptr"), turning every container stop into a crash.
+// Close cleanly on shutdown so the WAL is checkpointed. (The production aborts in Statement::~Statement —
+// "Assertion failed: (env) != nullptr" — were a Node 24.19+ regression in better-sqlite3 < 13, fixed by
+// upgrading to 13; this hook did not prevent them.)
 function hookShutdown() {
   if (g.__closeHooked) return;
   g.__closeHooked = true;
