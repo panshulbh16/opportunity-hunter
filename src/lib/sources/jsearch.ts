@@ -16,7 +16,7 @@ type JSearchJob = {
 const COUNTRY: Record<string, string> = { IN: "India", US: "United States", GB: "United Kingdom", DE: "Germany", SG: "Singapore", CA: "Canada", AU: "Australia", AE: "UAE", NL: "Netherlands", FR: "France" };
 const COUNTRY_CODE = Object.fromEntries(Object.entries(COUNTRY).map(([k, v]) => [v.toLowerCase(), k.toLowerCase()]));
 const TYPE: Record<string, string> = { FULLTIME: "full-time", PARTTIME: "part-time", CONTRACTOR: "contract", INTERN: "internship" };
-const MAX_QUERIES_PER_RUN = 3; // ponytail: free tier is ~200 requests/month; raise when paying
+export const MAX_QUERIES_PER_RUN = 3; // API calls per pool refresh; the monthly budget in agent.ts assumes this
 
 function salary(j: JSearchJob) {
   if (j.job_salary_string) return j.job_salary_string;

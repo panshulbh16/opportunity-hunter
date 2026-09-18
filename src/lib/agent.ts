@@ -5,6 +5,7 @@ import { email } from "./email";
 import { PLANS, remainingDiscoveries, type Plan } from "./plans";
 import { activeSources } from "./sources";
 import type { SearchQuery, SourceAdapter } from "./sources/types";
+import { MAX_QUERIES_PER_RUN } from "./sources/jsearch";
 import {
   calculateMatchScore, deduplicateOpportunities, generateDailyDigest, generateMatchExplanation, generateSearchQueries,
   normalizeOpportunity, type NormalizedOpportunity, type Opportunity,
@@ -16,6 +17,12 @@ const FREQUENCY_HOURS: Record<string, number> = { daily: 24, twice_daily: 12, we
 // Feeds occasionally return long-dead postings; don't create new matches for them.
 // Already-matched listings are untouched, so saved and applied entries survive.
 const MAX_LISTING_AGE_DAYS = 45;
+
+// The pool is refreshed on a fixed global cadence, never per user: signups, "Run Search Now" and
+// scheduled hunts all score against the shared pool, which costs nothing. Only refreshPool() spends API calls.
+// Defaults fit the ~200 calls/month free RapidAPI tier: 2 refreshes/day × 3 calls ≈ 180/month.
+const REFRESH_HOURS = Number(process.env.POOL_REFRESH_HOURS ?? 12);
+const MONTHLY_CALL_BUDGET = Number(process.env.RAPIDAPI_MONTHLY_CALLS ?? 180);
 
 export type HuntResult = { retrieved: number; newOpportunities: number; newMatches: number; notified: number; limited: boolean };
 
@@ -64,17 +71,50 @@ async function collect(queries: SearchQuery[]) {
   return { retrieved: all.length, fresh };
 }
 
+const utc = (sqliteTime: string) => Date.parse(sqliteTime.replace(" ", "T") + "Z");
+
+export function apiUsage() {
+  const runs = (db.prepare("SELECT COUNT(*) n FROM source_runs WHERE source LIKE 'JSearch%' AND started_at >= date('now','start of month')").get() as { n: number }).n;
+  const last = (db.prepare("SELECT MAX(started_at) t FROM source_runs").get() as { t: string | null }).t;
+  return { callsThisMonth: runs * MAX_QUERIES_PER_RUN, budget: MONTHLY_CALL_BUDGET, lastRefresh: last, refreshHours: REFRESH_HOURS };
+}
+
 /**
- * Score the shared opportunity pool for one user.
- * `collectFirst: false` skips the API round-trip — used when the caller has already refreshed the pool
- * for a batch of users, since every user is scored against the same pool regardless of who fetched it.
+ * Refresh the shared pool if it's due and the month's API budget allows. Safe to call from anywhere —
+ * it self-limits, so a burst of signups or clicks costs at most one refresh per REFRESH_HOURS.
  */
-export async function runHunt(userId: number, { collectFirst = true } = {}): Promise<HuntResult> {
+export async function refreshPool(): Promise<"refreshed" | "fresh" | "budget" | "no-sources"> {
+  if (!activeSources().length) return "no-sources";
+  const u = apiUsage();
+  if (u.lastRefresh && Date.now() - utc(u.lastRefresh) < REFRESH_HOURS * 36e5) return "fresh";
+  if (u.callsThisMonth + MAX_QUERIES_PER_RUN > MONTHLY_CALL_BUDGET) return "budget";
+
+  const seen = new Set<string>();
+  const queries: SearchQuery[] = [];
+  for (const { user_id } of db.prepare("SELECT user_id FROM search_profiles").all() as { user_id: number }[]) {
+    const profile = getProfile(user_id);
+    if (!profile) continue;
+    for (const q of generateSearchQueries(profile)) {
+      const key = `${q.q}|${q.location ?? ""}|${q.remote ?? false}`.toLowerCase();
+      if (!seen.has(key)) { seen.add(key); queries.push(q); }
+    }
+  }
+  if (!queries.length) return "fresh";
+  // Each refresh only issues a few queries, so advance a cursor by that many every time —
+  // over successive refreshes every user's searches get their turn.
+  const done = (db.prepare("SELECT COUNT(*) n FROM source_runs").get() as { n: number }).n;
+  const offset = (done * MAX_QUERIES_PER_RUN) % queries.length;
+  await collect([...queries.slice(offset), ...queries.slice(0, offset)]);
+  return "refreshed";
+}
+
+/** Score the shared opportunity pool for one user. Never calls an external API — see refreshPool(). */
+export async function runHunt(userId: number): Promise<HuntResult> {
   const profile = getProfile(userId);
   const user = db.prepare("SELECT name, email, subscription_plan FROM users WHERE id = ?").get(userId) as { name: string; email: string; subscription_plan: Plan } | undefined;
   if (!profile || !user) return { retrieved: 0, newOpportunities: 0, newMatches: 0, notified: 0, limited: false };
 
-  const { retrieved, fresh } = collectFirst ? await collect(generateSearchQueries(profile)) : { retrieved: 0, fresh: 0 };
+  const retrieved = 0, fresh = 0;
 
   // Candidates: everything not yet evaluated for this user (rejected/hidden matches persist, so they never resurface).
   const candidates = (db.prepare(`SELECT o.* FROM opportunities o WHERE o.category = ? AND o.posted_date >= date('now', ?)
@@ -131,48 +171,25 @@ export function evaluateForUser(userId: number, opp: Opportunity) {
   return b;
 }
 
-/**
- * Run hunts for every profile whose schedule is due. Called by the in-process scheduler and /api/cron/hunt.
- * Sources are polled ONCE for the deduplicated union of every due profile's queries, then each user is scored
- * against the shared pool — so API usage tracks the number of distinct queries, not the number of users.
- */
-async function collectForProfiles(userIds: number[]) {
-  const seen = new Set<string>();
-  const queries: SearchQuery[] = [];
-  for (const id of userIds) {
-    const profile = getProfile(id);
-    if (!profile) continue;
-    for (const q of generateSearchQueries(profile)) {
-      const key = `${q.q}|${q.location ?? ""}|${q.remote ?? false}`.toLowerCase();
-      if (!seen.has(key)) { seen.add(key); queries.push(q); }
-    }
-  }
-  // Adapters cap how many queries they run per call, so rotate daily — otherwise the same few
-  // queries at the head of the list would be the only ones ever issued.
-  const offset = queries.length ? Math.floor(Date.now() / 864e5) % queries.length : 0;
-  await collect([...queries.slice(offset), ...queries.slice(0, offset)]);
-}
-
 async function scoreFor(userIds: number[]) {
-  for (const id of userIds) await runHunt(id, { collectFirst: false });
+  for (const id of userIds) await runHunt(id);
   return userIds.length;
 }
 
+/** Scheduler tick (in-process every 15 min, and /api/cron/hunt): refresh the pool if due, then score due users. */
 export async function runDueHunts() {
+  await refreshPool();
   const rows = db.prepare("SELECT user_id, search_frequency, last_run_at FROM search_profiles").all() as { user_id: number; search_frequency: string; last_run_at: string | null }[];
   const due = rows.filter((r) => {
     const hours = FREQUENCY_HOURS[r.search_frequency] ?? 24;
     return !r.last_run_at || Date.now() - new Date(r.last_run_at.replace(" ", "T") + "Z").getTime() > hours * 36e5;
   }).map((r) => r.user_id);
-  if (!due.length) return 0;
-  await collectForProfiles(due);
-  return scoreFor(due);
+  return due.length ? scoreFor(due) : 0;
 }
 
-/** Force a hunt for every profile regardless of schedule (admin action), still on a single shared fetch. */
+/** Score every profile now (admin action). Still respects the refresh cadence and budget. */
 export async function runAllHunts() {
+  await refreshPool();
   const ids = (db.prepare("SELECT user_id FROM search_profiles").all() as { user_id: number }[]).map((r) => r.user_id);
-  if (!ids.length) return 0;
-  await collectForProfiles(ids);
   return scoreFor(ids);
 }

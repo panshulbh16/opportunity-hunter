@@ -8,7 +8,7 @@ import { hashPassword, token, verifyPassword } from "@/lib/password";
 import { rateLimit } from "@/lib/ratelimit";
 import { track } from "@/lib/analytics";
 import { email } from "@/lib/email";
-import { runHunt } from "@/lib/agent";
+import { refreshPool, runHunt } from "@/lib/agent";
 import { PLANS, paymentsConfigured, type Plan } from "@/lib/plans";
 import { getProfile } from "@/lib/queries";
 
@@ -69,7 +69,11 @@ export async function requestPasswordReset(_: ActionState, fd: FormData): Promis
       const t = token();
       db.prepare("INSERT INTO password_resets (token, user_id, expires_at) VALUES (?, ?, ?)").run(t, u.id, new Date(Date.now() + 36e5).toISOString());
       const url = `${process.env.APP_URL ?? "http://localhost:3000"}/reset-password?token=${t}`;
-      await email.send({ to: em, subject: "Reset your Opportunity Hunter password", text: `Hi ${u.name},\n\nReset your password here (valid for 1 hour):\n${url}\n\nIf you didn't request this, ignore this email.` });
+      // A delivery failure must look identical to success: otherwise the error appears only for
+      // registered addresses, revealing who has an account (and leaking the provider's raw error).
+      await email
+        .send({ to: em, subject: "Reset your Opportunity Hunter password", text: `Hi ${u.name},\n\nReset your password here (valid for 1 hour):\n${url}\n\nIf you didn't request this, ignore this email.` })
+        .catch((e) => console.error("[reset] email delivery failed", String(e).slice(0, 200)));
     }
     return { ok: email.name === "console" ? "If that email exists, a reset link was generated. Email delivery isn't configured, so check the server console for the link." : "If that email exists, we've sent a reset link." };
   });
@@ -128,6 +132,7 @@ export async function saveProfile(_: ActionState, fd: FormData): Promise<ActionS
     if (!user!.onboarded) {
       db.prepare("UPDATE users SET onboarded = 1 WHERE id = ?").run(user!.id);
       track("onboarding_completed", user!.id, {});
+      await refreshPool(); // only fetches if the pool is stale — e.g. a brand-new deployment
       await runHunt(user!.id);
       redirect("/dashboard?welcome=1");
     }
@@ -140,9 +145,10 @@ export async function runSearchNow(): Promise<ActionState> {
   return guard(async () => {
     const user = await requireUser();
     await rateLimit("hunt", 6, 300);
+    await refreshPool();
     const r = await runHunt(user.id);
     revalidatePath("/", "layout");
-    return { ok: r.newMatches ? `Found ${r.newMatches} new ${r.newMatches === 1 ? "opportunity" : "opportunities"}${r.limited ? " (free-plan weekly limit reached)" : ""}.` : r.limited ? "New matches found, but you've used your free opportunities this week. Upgrade to see them." : "No new opportunities right now. We'll keep hunting." };
+    return { ok: r.newMatches ? `Found ${r.newMatches} new ${r.newMatches === 1 ? "opportunity" : "opportunities"}${r.limited ? " (weekly limit reached)" : ""}.` : r.limited ? "New matches found, but you've used this week's free opportunities. Your limit resets weekly." : "No new opportunities right now. We'll keep hunting." };
   });
 }
 
