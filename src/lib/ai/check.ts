@@ -5,6 +5,7 @@ import {
   parseSearchProfile, recommendNextAction, type Profile,
 } from "./index.ts";
 import { demoSource } from "../sources/demo.ts";
+import { pickApply } from "../sources/jsearch.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -83,5 +84,13 @@ assert.deepEqual(parsed.remote_preference, ["remote"]);
 assert.ok(parsed.roles?.includes("AI Engineer"));
 assert.ok(parsed.locations?.includes("India") && parsed.locations?.includes("Global"));
 assert.deepEqual(parsed.preferences, ["product_company"]);
+
+// Apply links: Jobrapido previews expire (404), so the employer's own page, any other publisher, or Google Jobs wins.
+const JR = "https://in.jobrapido.com/jobpreview/1?trk=bingjobs", G = "https://www.google.com/search?ibp=htl;jobs&q=x";
+assert.equal(pickApply({ job_publisher: "Jobrapido", job_apply_link: JR, job_google_link: G, apply_options: [
+  { publisher: "Jobrapido", apply_link: JR }, { publisher: "LinkedIn", apply_link: "https://in.linkedin.com/jobs/view/1" },
+  { publisher: "Acme Careers", apply_link: "https://careers.acme.com/1", is_direct: true }] }).url, "https://careers.acme.com/1", "direct employer link first");
+assert.equal(pickApply({ job_publisher: "Jobrapido", job_apply_link: JR, job_google_link: G, apply_options: [{ publisher: "Jobrapido", apply_link: JR }] }).url, G, "Jobrapido-only falls back to Google Jobs");
+assert.equal(pickApply({ job_publisher: "LinkedIn", job_apply_link: "https://in.linkedin.com/jobs/view/2" }).url, "https://in.linkedin.com/jobs/view/2", "good main link kept");
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);
