@@ -1,11 +1,12 @@
 // Self-check for the matching engine: `npm run check`. Fails loudly if scoring/dedupe/parsing regress.
 import assert from "node:assert/strict";
 import {
-  calculateMatchScore, deduplicateOpportunities, generateApplicationDraft, generateMatchExplanation, normalizeOpportunity, parseSalary,
+  calculateMatchScore, deduplicateOpportunities, mergeImportedProfile, generateApplicationDraft, generateMatchExplanation, normalizeOpportunity, parseSalary,
   parseSearchProfile, recommendNextAction, type Profile,
 } from "./index.ts";
 import { demoSource } from "../sources/demo.ts";
 import { pickApply } from "../sources/jsearch.ts";
+import { looksLikePdf } from "./resume.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -92,5 +93,16 @@ assert.equal(pickApply({ job_publisher: "Jobrapido", job_apply_link: JR, job_goo
   { publisher: "Acme Careers", apply_link: "https://careers.acme.com/1", is_direct: true }] }).url, "https://careers.acme.com/1", "direct employer link first");
 assert.equal(pickApply({ job_publisher: "Jobrapido", job_apply_link: JR, job_google_link: G, apply_options: [{ publisher: "Jobrapido", apply_link: JR }] }).url, G, "Jobrapido-only falls back to Google Jobs");
 assert.equal(pickApply({ job_publisher: "LinkedIn", job_apply_link: "https://in.linkedin.com/jobs/view/2" }).url, "https://in.linkedin.com/jobs/view/2", "good main link kept");
+
+// Resume import: lists gain new entries without duplicates (case-insensitive); scalars change only when the resume had one.
+const before = { roles: ["AI Engineer"], skills: ["Python", "aws"], keywords: [], industries: [], locations: ["India"], years_experience: 4, current_role: "Engineer at Acme", education: "", seniority: "mid" };
+const merged = mergeImportedProfile(before, { roles: ["ai engineer", "ML Engineer"], skills: ["AWS", "RAG", " "], keywords: ["GenAI"], industries: ["Fintech"], locations: [], years_experience: 0, current_role: "", education: "B.Tech CS", seniority: "senior" });
+assert.deepEqual(merged.roles, ["AI Engineer", "ML Engineer"], "no duplicate role, existing first");
+assert.deepEqual(merged.skills, ["Python", "aws", "RAG"], "AWS deduped against aws; blanks dropped");
+assert.equal(merged.years_experience, 4, "resume without years keeps the entered value");
+assert.equal(merged.current_role, "Engineer at Acme", "empty current_role doesn't wipe the entered one");
+assert.equal(merged.education, "B.Tech CS");
+assert.equal(merged.seniority, "senior");
+assert.ok(looksLikePdf(new TextEncoder().encode("%PDF-1.7\n...")) && !looksLikePdf(new TextEncoder().encode("PK\u0003\u0004 docx")), "only real PDFs pass");
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);

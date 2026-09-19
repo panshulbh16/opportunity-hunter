@@ -12,6 +12,7 @@ import { refreshPool, runHunt } from "@/lib/agent";
 import { PLANS, paymentsConfigured, type Plan } from "@/lib/plans";
 import { getProfile } from "@/lib/queries";
 import { createOrder, markOrderPaid, paymentSignatureValid } from "@/lib/razorpay";
+import { extractProfileFromResume, looksLikePdf, RESUME_MAX_BYTES, resumeImportConfigured, type ResumeProfile } from "@/lib/ai/resume";
 
 export type ActionState = { error?: string; ok?: string } | undefined;
 
@@ -95,6 +96,25 @@ export async function resetPassword(_: ActionState, fd: FormData): Promise<Actio
 }
 
 // ---------- Search profile ----------
+
+/** Reads an uploaded resume into draft profile fields. Nothing is saved and the file isn't kept: the user reviews, then saves. */
+export async function importResume(fd: FormData): Promise<{ profile?: ResumeProfile; error?: string }> {
+  return guard(async () => {
+    const user = await getUser(); // not requireUser: this also runs during onboarding
+    if (!user) redirect("/login");
+    if (!resumeImportConfigured) fail("Resume import isn't available yet. Fill in the form instead.");
+    await rateLimit("resume", 5, 600);
+    const file = fd.get("resume");
+    if (!(file instanceof File) || file.size === 0) fail("Choose your resume as a PDF file.");
+    const f = file as File;
+    if (f.size > RESUME_MAX_BYTES) fail("That PDF is over 5 MB. Export a smaller copy and try again.");
+    const bytes = Buffer.from(await f.arrayBuffer());
+    if (!looksLikePdf(bytes)) fail("That file isn't a PDF. Save your resume as a PDF and try again.");
+    const profile = await extractProfileFromResume(bytes);
+    track("resume_imported", user!.id, { skills: profile.skills.length, roles: profile.roles.length });
+    return { profile };
+  });
+}
 
 export async function saveProfile(_: ActionState, fd: FormData): Promise<ActionState> {
   return guard(async () => {
