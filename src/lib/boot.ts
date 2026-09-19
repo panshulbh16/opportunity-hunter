@@ -40,6 +40,19 @@ function expirePasses() {
   }
 }
 
+/**
+ * Listings saved before jsearch.ts learned to skip Jobrapido still point at its expired "jobpreview" pages (404).
+ * INSERT OR IGNORE never refreshes them, so point each at a Google Jobs search for the same title and company.
+ */
+function repairExpiredApplyLinks() {
+  const rows = db.prepare("SELECT id, title, company FROM opportunities WHERE application_url LIKE '%jobrapido.%'").all() as { id: number; title: string; company: string }[];
+  const fix = db.prepare("UPDATE opportunities SET application_url = ? WHERE id = ?");
+  db.transaction(() => {
+    for (const r of rows) fix.run(`https://www.google.com/search?ibp=htl;jobs&q=${encodeURIComponent(`${r.title} ${r.company}`)}`, r.id);
+  })();
+  if (rows.length) console.log(`[boot] repointed ${rows.length} expired Jobrapido apply links to Google Jobs`);
+}
+
 export const DEMO_EMAIL = "demo@opportunityhunter.app";
 export const DEMO_PASSWORD = "demo1234";
 
@@ -83,6 +96,7 @@ export async function boot() {
   // Demo source is retired; drop any seeded rows (matches/saves/applications cascade).
   const purged = db.prepare("DELETE FROM opportunities WHERE is_demo = 1").run().changes;
   if (purged) console.log(`[boot] removed ${purged} demo opportunities`);
+  repairExpiredApplyLinks();
   await seedDemoUser();
   // ADMIN_EMAILS is otherwise only consulted at signup, so an address added later would never take effect.
   // Grant-only: removing an address here does not revoke admin, so a typo can't lock everyone out.

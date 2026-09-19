@@ -11,7 +11,20 @@ type JSearchJob = {
   job_description?: string; job_employment_types?: string[] | null;
   job_min_salary?: number | null; job_max_salary?: number | null; job_salary_period?: string | null; job_salary_string?: string | null;
   job_highlights?: { Qualifications?: string[] } | string[] | null;
+  apply_options?: { publisher?: string; apply_link?: string; is_direct?: boolean }[] | null;
 };
+
+// Jobrapido "jobpreview" pages expire within days (most 404 by the time a user clicks), so any other link wins.
+const expires = (url?: string) => !url || /(^|\.)jobrapido\./i.test(new URL(url, "https://x").hostname);
+
+/** Best apply link: the employer's own page, then any non-expiring publisher, then Google Jobs (lists every option). */
+export function pickApply(j: Pick<JSearchJob, "job_publisher" | "job_apply_link" | "job_google_link" | "apply_options">) {
+  const options = (j.apply_options ?? []).filter((o) => !expires(o.apply_link));
+  const pick = options.find((o) => o.is_direct) ?? options[0];
+  if (pick) return { url: pick.apply_link!, publisher: pick.publisher ?? j.job_publisher };
+  if (!expires(j.job_apply_link)) return { url: j.job_apply_link!, publisher: j.job_publisher };
+  return { url: j.job_google_link || j.job_apply_link || "", publisher: j.job_google_link ? "Google Jobs" : j.job_publisher };
+}
 
 const COUNTRY: Record<string, string> = { IN: "India", US: "United States", GB: "United Kingdom", DE: "Germany", SG: "Singapore", CA: "Canada", AU: "Australia", AE: "UAE", NL: "Netherlands", FR: "France" };
 const COUNTRY_CODE = Object.fromEntries(Object.entries(COUNTRY).map(([k, v]) => [v.toLowerCase(), k.toLowerCase()]));
@@ -31,10 +44,10 @@ function toRaw(j: JSearchJob): RawOpportunity {
   const country = j.job_country ? COUNTRY[j.job_country] ?? j.job_country : "";
   const place = [j.job_city, j.job_state].filter(Boolean).join(", ");
   const location = j.job_is_remote ? `Remote — ${country || "Global"}` : place ? `${place}, ${country}` : country || "Not specified";
-  const url = j.job_apply_link || j.job_google_link || "";
+  const { url, publisher } = pickApply(j);
   const quals = Array.isArray(j.job_highlights) ? undefined : j.job_highlights?.Qualifications?.slice(0, 5);
   return {
-    source_name: j.job_publisher ? `${j.job_publisher} via JSearch` : "JSearch",
+    source_name: publisher ? `${publisher} via JSearch` : "JSearch",
     source_url: url,
     title: j.job_title,
     company: j.employer_name,
