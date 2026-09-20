@@ -54,7 +54,9 @@ const INSTRUCTIONS = `This is a candidate's resume. Fill in their job-search pro
 export const looksLikePdf = (bytes: Uint8Array) => Buffer.from(bytes.subarray(0, 5)).toString("latin1") === "%PDF-";
 
 export async function extractProfileFromResume(pdf: Buffer): Promise<ResumeProfile> {
-  const client = new Anthropic();
+  // An org-level key (one not scoped to a workspace) must name the workspace to bill.
+  const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
+  const client = new Anthropic(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {});
   let response: Anthropic.Beta.BetaMessage;
   try {
     response = await client.beta.messages.create({
@@ -79,6 +81,7 @@ export async function extractProfileFromResume(pdf: Buffer): Promise<ResumeProfi
   }
   if (response.stop_reason === "refusal") throw new Error("Couldn't read that resume. Fill in the form yourself instead.");
   if (response.stop_reason === "max_tokens") throw new Error("That resume was too long to read in one go. Fill in the form yourself instead.");
+  console.log(`[resume] read by ${response.model}: ${response.usage.input_tokens} in / ${response.usage.output_tokens} out tokens`);
   const text = response.content.find((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")?.text;
   if (!text) throw new Error("Couldn't read that resume. Try again, or fill in the form yourself.");
   return JSON.parse(text) as ResumeProfile;
