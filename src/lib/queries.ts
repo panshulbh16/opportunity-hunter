@@ -24,7 +24,7 @@ export type MatchRow = {
   viewed_at: string | null; created_at: string; saved: number; application_status: string | null;
 };
 
-export type MatchWithOpp = { match: MatchRow | null; opp: Opportunity; liveScore?: number };
+export type MatchWithOpp = { match: MatchRow | null; opp: Opportunity; liveScore?: number; closed?: boolean };
 export type MatchedOpp = MatchWithOpp & { match: MatchRow };
 
 // Every gathered opportunity, left-joined with this user's match (if the agent scored it for them).
@@ -32,7 +32,8 @@ const OPP_SELECT = `
   SELECT m.id AS m_id, m.user_id, m.opportunity_id, m.score, m.skills_score, m.experience_score, m.location_score, m.salary_score,
     m.role_score, m.explanation, m.status, m.viewed_at, m.created_at AS m_created_at, o.*,
     (SELECT 1 FROM saved_opportunities s WHERE s.user_id = m.user_id AND s.opportunity_id = o.id) AS saved,
-    (SELECT status FROM applications a WHERE a.user_id = m.user_id AND a.opportunity_id = o.id) AS application_status
+    (SELECT status FROM applications a WHERE a.user_id = m.user_id AND a.opportunity_id = o.id) AS application_status,
+    (SELECT 1 FROM link_checks lc WHERE lc.opportunity_id = o.id AND lc.status_code IN (404, 410)) AS closed
   FROM opportunities o LEFT JOIN matches m ON m.opportunity_id = o.id AND m.user_id = ?`;
 
 function splitRow(r: Record<string, unknown>): MatchWithOpp {
@@ -42,7 +43,7 @@ function splitRow(r: Record<string, unknown>): MatchWithOpp {
     role_score: r.role_score, explanation: json<Explanation>(r.explanation as string, { strengths: [], gaps: [], difficulty: "medium", difficultyReason: "" }),
     status: r.status, viewed_at: r.viewed_at, created_at: r.m_created_at, saved: r.saved ?? 0, application_status: r.application_status ?? null,
   } as MatchRow;
-  return { match, opp: parseOpp(r) };
+  return { match, opp: parseOpp(r), closed: Boolean(r.closed) };
 }
 
 export type Filters = {
@@ -56,6 +57,11 @@ export function listOpportunities(userId: number, f: Filters = {}): MatchWithOpp
   const args: unknown[] = [userId];
   if (f.status) { where.push("m.status = ?"); args.push(f.status); } else where.push("(m.status IS NULL OR m.status NOT IN ('rejected','hidden'))");
   if (f.matchedOnly) where.push("m.id IS NOT NULL");
+  // A listing the employer took down disappears from lists, but stays for anyone who saved or applied to it.
+  where.push(`(NOT EXISTS (SELECT 1 FROM link_checks lc WHERE lc.opportunity_id = o.id AND lc.status_code IN (404, 410))
+    OR EXISTS (SELECT 1 FROM saved_opportunities s2 WHERE s2.user_id = ? AND s2.opportunity_id = o.id)
+    OR EXISTS (SELECT 1 FROM applications a2 WHERE a2.user_id = ? AND a2.opportunity_id = o.id))`);
+  args.push(userId, userId);
   if (f.q) { where.push("(o.title LIKE ? OR o.company LIKE ? OR o.description LIKE ? OR o.skills LIKE ?)"); args.push(...Array(4).fill(`%${f.q}%`)); }
   if (f.minScore) { where.push("m.score >= ?"); args.push(f.minScore); }
   if (f.location) { where.push("(o.location LIKE ? OR o.country LIKE ?)"); args.push(`%${f.location}%`, `%${f.location}%`); }

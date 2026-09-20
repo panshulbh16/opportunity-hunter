@@ -50,6 +50,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">{o.title}</h1>
                 <p className="mt-1 text-zinc-600">{o.company}{o.company_type && <span className="text-zinc-400"> · {titleCase(o.company_type)} company</span>}</p>
+                {item.closed && <p className="mt-2 text-sm font-medium text-amber-700">Listing closed — the employer has taken this one down, so the apply link may not work.</p>}
               </div>
               {m && <ScoreBadge score={m.score} size="lg" />}
             </div>

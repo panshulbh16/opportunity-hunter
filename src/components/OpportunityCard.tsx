@@ -14,6 +14,7 @@ export function OpportunityCard({ item, index = 0 }: { item: MatchWithOpp; index
             {o.title}
           </Link>
           <p className="mt-0.5 text-sm text-zinc-600">{o.company}</p>
+          {item.closed && <p className="mt-1.5 text-[13px] font-medium text-amber-700">Listing closed — the employer has taken this one down.</p>}
         </div>
         {m ? <ScoreBadge score={m.score} /> : item.liveScore != null ? <ScoreBadge score={item.liveScore} /> : <span className="chip shrink-0 text-zinc-500">Not scored</span>}
       </div>

@@ -4,6 +4,7 @@ import { DATABASE_FILE, db } from "./db";
 import { hashPassword } from "./password";
 import { runDueHunts, runHunt } from "./agent";
 import { expireLapsedPasses } from "./plans";
+import { sweepListingLinks } from "./linkcheck";
 
 const BACKUPS_KEPT = 7;
 
@@ -111,5 +112,6 @@ export async function boot() {
     safeBackup(); // no-op unless today's snapshot is missing
     expirePasses();
     runDueHunts().catch((e) => console.error("[agent] scheduled run failed", e));
+    sweepListingLinks().catch((e) => console.error("[links] sweep failed", e));
   }, 15 * 60 * 1000).unref();
 }

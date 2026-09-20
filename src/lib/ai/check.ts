@@ -7,6 +7,7 @@ import {
 import { demoSource } from "../sources/demo.ts";
 import { pickApply } from "../sources/jsearch.ts";
 import { looksLikePdf } from "./resume.ts";
+import { classifyLinkStatus } from "../linkcheck.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -104,5 +105,12 @@ assert.equal(merged.current_role, "Engineer at Acme", "empty current_role doesn'
 assert.equal(merged.education, "B.Tech CS");
 assert.equal(merged.seniority, "senior");
 assert.ok(looksLikePdf(new TextEncoder().encode("%PDF-1.7\n...")) && !looksLikePdf(new TextEncoder().encode("PK\u0003\u0004 docx")), "only real PDFs pass");
+
+// Dead apply links: only a real "gone" hides a listing. Bot blocks and rate limits must not.
+assert.equal(classifyLinkStatus(404), "closed");
+assert.equal(classifyLinkStatus(410), "closed");
+assert.equal(classifyLinkStatus(200), "alive");
+assert.equal(classifyLinkStatus(301), "alive");
+for (const blocked of [401, 403, 429, 500, 0]) assert.equal(classifyLinkStatus(blocked), "unknown", `${blocked} is not proof the job is gone`);
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);
