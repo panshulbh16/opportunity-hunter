@@ -1,6 +1,7 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 import { getUser } from "@/lib/auth";
-import { PLANS, paymentsConfigured } from "@/lib/plans";
+import { billingCurrency, internationalEnabled, PLANS, paymentsConfigured, proPrice } from "@/lib/plans";
 import { Check, Logo } from "@/components/ui";
 import { UpgradeButton } from "@/components/UpgradeButton";
 
@@ -8,6 +9,7 @@ export const metadata = { title: "Pricing" };
 
 export default async function Pricing() {
   const user = await getUser();
+  const price = proPrice(billingCurrency(await headers()));
   return (
     <div className="min-h-screen bg-white">
       <header className="border-b border-zinc-100">
@@ -37,7 +39,7 @@ export default async function Pricing() {
           <div className="relative rounded-xl bg-zinc-900 p-8 text-white shadow-[0_24px_60px_-24px_rgba(0,0,0,0.5)]">
             {!paymentsConfigured && <span className="absolute -top-3 left-8 rounded-full bg-indigo-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide">Coming soon</span>}
             <h2 className="text-lg font-semibold">{PLANS.pro.name}</h2>
-            <p className="mt-4 text-4xl font-semibold tracking-tight">₹{PLANS.pro.price}<span className="text-base font-normal text-zinc-400">/30 days</span></p>
+            <p className="mt-4 text-4xl font-semibold tracking-tight">{price.display}<span className="text-base font-normal text-zinc-400">/30 days</span></p>
             <ul className="mt-8 space-y-3 text-sm text-zinc-200">
               {PLANS.pro.features.map((f) => <li key={f} className="flex gap-3"><Check className="mt-0.5 h-4 w-4 text-indigo-400" />{f}</li>)}
             </ul>
@@ -47,7 +49,7 @@ export default async function Pricing() {
             </div>
           </div>
         </div>
-        <p className="mt-10 text-center text-xs text-zinc-400">{paymentsConfigured ? "Prices in INR. Pro is a 30-day pass paid once via Razorpay (UPI, cards, netbanking). It never renews on its own, so you're never charged by surprise." : "Prices in INR. Pro isn't available to buy yet — nobody will be charged."}{" "}<Link href="/refunds" className="underline hover:text-zinc-700">Refund policy</Link></p>
+        <p className="mt-10 text-center text-xs text-zinc-400">{paymentsConfigured ? "Pro is a 30-day pass paid once via Razorpay. It never renews on its own, so you're never charged by surprise." + (internationalEnabled() ? " ₹499 in India, $10 elsewhere." : " Prices in INR.") : "Prices in INR. Pro isn't available to buy yet — nobody will be charged."}{" "}<Link href="/refunds" className="underline hover:text-zinc-700">Refund policy</Link></p>
       </main>
     </div>
   );

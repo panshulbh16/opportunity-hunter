@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { db, now } from "./db.ts";
-import { PLANS, proUntil } from "./plans.ts";
+import { PLANS, proPrice, proUntil, type BillingCurrency } from "./plans.ts";
 import { track } from "./analytics.ts";
 
 // ponytail: Pro is a 30-day pass bought once via Razorpay Orders, no auto-renewal (no mandates, no cancel flow).
@@ -10,13 +10,14 @@ export const PASS_DAYS = 30;
 const hmac = (secret: string, data: string) => crypto.createHmac("sha256", secret).update(data).digest("hex");
 const same = (a: string, b: string) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
-export async function createOrder(userId: number) {
-  const amount = PLANS.pro.price * 100; // paise
+export async function createOrder(userId: number, currency: BillingCurrency = "INR") {
+  const { amount: units } = proPrice(currency);
+  const amount = units * 100; // paise for INR, cents for USD — Razorpay takes the smallest unit
   const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString("base64");
   const res = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ amount, currency: "INR", receipt: `u${userId}-${Date.now()}`, notes: { user_id: String(userId) } }),
+    body: JSON.stringify({ amount, currency, receipt: `u${userId}-${Date.now()}`, notes: { user_id: String(userId), plan: "pro" } }),
   });
   if (!res.ok) {
     console.error("[razorpay] order create failed", res.status, await res.text());
@@ -24,7 +25,7 @@ export async function createOrder(userId: number) {
   }
   const { id } = (await res.json()) as { id: string };
   db.prepare("INSERT INTO orders (id, user_id, amount) VALUES (?, ?, ?)").run(id, userId, amount);
-  return { orderId: id, amount };
+  return { orderId: id, amount, currency };
 }
 
 /** Checkout's success callback: signature = HMAC(order_id|payment_id, key secret). */

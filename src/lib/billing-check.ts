@@ -11,7 +11,7 @@ process.env.RAZORPAY_KEY_SECRET = "key_secret";
 process.env.RAZORPAY_WEBHOOK_SECRET = "hook_secret";
 
 const { db } = await import("./db.ts");
-const { proUntil, expireLapsedPasses } = await import("./plans.ts");
+const { proUntil, expireLapsedPasses, billingCurrency, proPrice } = await import("./plans.ts");
 const { markOrderPaid, paymentSignatureValid, webhookSignatureValid } = await import("./razorpay.ts");
 
 const sign = (secret: string, data: string) => crypto.createHmac("sha256", secret).update(data).digest("hex");
@@ -56,6 +56,19 @@ order("order_b2", b);
 markOrderPaid("order_b2", "pay_b2");
 assert.equal(plan(b), "pro");
 assert.ok(Math.abs(daysLeft(b) - 30) < 0.01, "renewal after lapse starts from now");
+
+// Currency: INR unless the request proves the payer is outside India. Never overcharge on a guess.
+const hdrs = (h: Record<string, string>) => ({ get: (k: string) => h[k.toLowerCase()] ?? null });
+assert.equal(billingCurrency(hdrs({ "cf-ipcountry": "US" })), "INR", "USD stays off until RAZORPAY_INTERNATIONAL=true");
+process.env.RAZORPAY_INTERNATIONAL = "true";
+const billing = billingCurrency, price = proPrice;
+assert.equal(billing(hdrs({ "cf-ipcountry": "US" })), "USD", "a US visitor pays in dollars");
+assert.equal(billing(hdrs({ "cf-ipcountry": "IN" })), "INR", "an Indian visitor pays in rupees");
+assert.equal(billing(hdrs({ "cf-ipcountry": "XX" })), "INR", "unknown country falls back to INR");
+assert.equal(billing(hdrs({ "accept-language": "en-US,en;q=0.9" })), "INR", "browser locale alone never triggers USD");
+assert.deepEqual(price("INR"), { currency: "INR", amount: 499, display: "₹499" });
+assert.deepEqual(price("USD"), { currency: "USD", amount: 10, display: "$10" });
+delete process.env.RAZORPAY_INTERNATIONAL;
 
 db.close();
 fs.rmSync(dir, { recursive: true, force: true });

@@ -29,7 +29,7 @@ export default function Terms() {
 
       <h2>Pro plan and payments</h2>
       <ul>
-        <li>Pro costs ₹{PLANS.pro.price} for {PASS_DAYS} days, paid once through Razorpay. Prices are in Indian rupees.</li>
+        <li>Pro costs ₹{PLANS.pro.prices.INR} for {PASS_DAYS} days in India, or ${PLANS.pro.prices.USD} where we bill in US dollars, paid once through Razorpay. Which one applies depends on where you are paying from.</li>
         <li>It does <strong>not</strong> renew automatically. When the {PASS_DAYS} days end, your account returns to the Free plan and you keep all your data. Buying again adds another {PASS_DAYS} days.</li>
         <li>If we change the price, passes you&apos;ve already bought aren&apos;t affected.</li>
         <li>Refunds are covered in our <Link className="underline" href="/refunds">Refund policy</Link>.</li>
