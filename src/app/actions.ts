@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db, json, now } from "@/lib/db";
@@ -9,7 +10,7 @@ import { rateLimit } from "@/lib/ratelimit";
 import { track } from "@/lib/analytics";
 import { email } from "@/lib/email";
 import { refreshPool, runHunt } from "@/lib/agent";
-import { PLANS, paymentsConfigured, type Plan } from "@/lib/plans";
+import { billingCurrency, PLANS, paymentsConfigured, type BillingCurrency, type Plan } from "@/lib/plans";
 import { getProfile } from "@/lib/queries";
 import { createOrder, markOrderPaid, paymentSignatureValid } from "@/lib/razorpay";
 import { extractProfileFromResume, looksLikePdf, RESUME_MAX_BYTES, resumeImportConfigured, type ResumeProfile } from "@/lib/ai/resume";
@@ -319,7 +320,7 @@ export async function deleteAccount() {
 
 // ---------- Billing ----------
 
-export type Checkout = { orderId: string; amount: number; keyId: string; name: string; email: string };
+export type Checkout = { orderId: string; amount: number; currency: BillingCurrency; keyId: string; name: string; email: string };
 
 export async function startUpgrade(): Promise<Checkout | { error: string }> {
   return guard(async () => {
@@ -327,8 +328,9 @@ export async function startUpgrade(): Promise<Checkout | { error: string }> {
     track("upgrade_clicked", user.id, { plan: "pro", paymentsConfigured });
     if (!paymentsConfigured) fail("Pro isn't on sale yet.");
     await rateLimit("upgrade", 10, 300);
-    const { orderId, amount } = await createOrder(user.id);
-    return { orderId, amount, keyId: process.env.RAZORPAY_KEY_ID!, name: user.name, email: user.email };
+    const currency = billingCurrency(await headers());
+    const { orderId, amount } = await createOrder(user.id, currency);
+    return { orderId, amount, currency, keyId: process.env.RAZORPAY_KEY_ID!, name: user.name, email: user.email };
   });
 }
 

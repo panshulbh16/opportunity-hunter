@@ -36,7 +36,7 @@ export function CheckoutButton({ className, label }: { className: string; label:
           key: order.keyId,
           order_id: order.orderId,
           amount: order.amount,
-          currency: "INR",
+          currency: order.currency,
           name: "Opportunity Hunter",
           description: "Pro · 30 days",
           prefill: { name: order.name, email: order.email },
