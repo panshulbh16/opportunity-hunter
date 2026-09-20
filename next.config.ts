@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3", "nodemailer"],
   outputFileTracingRoot: __dirname,
+  // Resume import posts the PDF to a server action (5 MB cap, checked in importResume); the default is 1 MB.
+  experimental: { serverActions: { bodySizeLimit: "6mb" } },
   // Baseline hardening for a public site accepting logins. HSTS is left to Railway's TLS proxy.
   async headers() {
     return [

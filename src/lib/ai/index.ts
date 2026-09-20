@@ -264,6 +264,31 @@ export function parseSearchProfile(text: string): Partial<Profile> {
   return p;
 }
 
+type ImportedProfile = Pick<Profile, "roles" | "skills" | "keywords" | "industries" | "locations" | "years_experience" | "current_role" | "education" | "seniority">;
+
+/**
+ * Folds a profile read from a resume into what the user already entered: lists gain the new entries
+ * (case-insensitive, existing first), and a scalar is replaced only when the resume actually had one.
+ */
+export function mergeImportedProfile<P extends ImportedProfile>(prev: P, found: ImportedProfile): P {
+  const union = (a: string[], b: string[]) => {
+    const seen = new Set(a.map((s) => s.toLowerCase()));
+    return [...a, ...b.map((s) => s.trim()).filter((s) => s && !seen.has(s.toLowerCase()) && seen.add(s.toLowerCase()))];
+  };
+  return {
+    ...prev,
+    roles: union(prev.roles, found.roles),
+    skills: union(prev.skills, found.skills),
+    keywords: union(prev.keywords, found.keywords),
+    industries: union(prev.industries, found.industries),
+    locations: union(prev.locations, found.locations),
+    years_experience: found.years_experience > 0 ? found.years_experience : prev.years_experience,
+    current_role: found.current_role.trim() || prev.current_role,
+    education: found.education.trim() || prev.education,
+    seniority: found.seniority || prev.seniority,
+  };
+}
+
 /** Roles × locations, capped, so a source adapter can run targeted searches. */
 export function generateSearchQueries(p: Profile): SearchQuery[] {
   const roles = p.roles.length ? p.roles : [p.skills[0] ? `${p.skills[0]} engineer` : "software engineer"];

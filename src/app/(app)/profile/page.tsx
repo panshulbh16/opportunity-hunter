@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { getProfile } from "@/lib/queries";
 import { PageHeader } from "@/components/ui";
+import { resumeImportConfigured } from "@/lib/ai/resume";
 import { EMPTY_PROFILE, ProfileForm, type ProfileValues } from "@/components/ProfileForm";
 
 export const metadata = { title: "Search Profile" };
@@ -19,7 +20,7 @@ export default async function ProfilePage() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader title="Search Profile" description="This is what the agent hunts for. Changes apply on the next run." />
-      <ProfileForm initial={initial} mode="edit" />
+      <ProfileForm initial={initial} mode="edit" resumeImport={resumeImportConfigured} />
     </div>
   );
 }

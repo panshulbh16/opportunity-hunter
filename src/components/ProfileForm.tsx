@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { saveProfile, type ActionState } from "@/app/actions";
-import { KNOWN_SKILLS, parseSearchProfile, type Profile } from "@/lib/ai";
+import { useActionState, useState, useTransition } from "react";
+import { importResume, saveProfile, type ActionState } from "@/app/actions";
+import { KNOWN_SKILLS, mergeImportedProfile, parseSearchProfile, type Profile } from "@/lib/ai";
 import { TagInput } from "./TagInput";
 import { Alert } from "./ui";
 import { RunSearchButton } from "./RunSearchButton";
@@ -32,12 +32,14 @@ function FormSection({ visible, onboarding, title, hint, children }: { visible: 
   );
 }
 
-export function ProfileForm({ initial, mode }: { initial: ProfileValues; mode: "onboarding" | "edit" }) {
+export function ProfileForm({ initial, mode, resumeImport = false }: { initial: ProfileValues; mode: "onboarding" | "edit"; resumeImport?: boolean }) {
   const [v, setV] = useState<ProfileValues>(initial);
   const [step, setStep] = useState(0);
   const [wish, setWish] = useState("");
   const [unspecified, setUnspecified] = useState(initial.salary_min == null && initial.salary_max == null && mode === "edit");
   const [state, formAction, pending] = useActionState(saveProfile, undefined as ActionState);
+  const [importing, startImport] = useTransition();
+  const [imported, setImported] = useState<{ kind: "success" | "error"; text: string }>();
   const set = <K extends keyof ProfileValues>(k: K) => (val: ProfileValues[K]) => setV((p) => ({ ...p, [k]: val }));
   const toggle = (k: "remote_preference" | "employment_types" | "preferences", val: string) =>
     setV((p) => ({ ...p, [k]: p[k].includes(val) ? p[k].filter((x) => x !== val) : [...p[k], val] }));
@@ -45,6 +47,21 @@ export function ProfileForm({ initial, mode }: { initial: ProfileValues; mode: "
   const onboarding = mode === "onboarding";
   const show = (i: number) => !onboarding || step === i;
   const canNext = step !== 0 || v.roles.length > 0 || v.skills.length > 0;
+
+  // The file input has no name, so saving the form never re-uploads the resume.
+  const importFile = (file: File | undefined) => {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("resume", file);
+    setImported(undefined);
+    startImport(async () => {
+      const res = await importResume(fd);
+      if (!res.profile) return setImported({ kind: "error", text: res.error ?? "Couldn't read that resume." });
+      const found = res.profile;
+      setV((prev) => mergeImportedProfile(prev, found));
+      setImported({ kind: "success", text: `Filled in from your resume: ${found.roles.length} roles and ${found.skills.length} skills. Check everything, then ${onboarding ? "continue" : "save"}.` });
+    });
+  };
 
   const applyWish = () => {
     const p = parseSearchProfile(wish);
@@ -65,6 +82,15 @@ export function ProfileForm({ initial, mode }: { initial: ProfileValues; mode: "
       {state?.ok && <Alert kind="success">{state.ok}</Alert>}
 
       <FormSection visible={show(0)} onboarding={onboarding} title={STEPS[0]} hint="Roles and skills drive most of the match score. Add several.">
+        {resumeImport && (
+          <div className="rounded-lg border border-dashed border-zinc-300 p-4">
+            <label className="label" htmlFor="resume">Start from your resume (PDF)</label>
+            <input id="resume" type="file" accept="application/pdf" disabled={importing} onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ""; }}
+              className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-zinc-700 disabled:opacity-60" />
+            <p className="hint" aria-live="polite">{importing ? "Reading your resume… this takes a few seconds." : "We read it to fill in the fields below. The file isn't stored."}</p>
+            {imported && <div className="mt-3"><Alert kind={imported.kind}>{imported.text}</Alert></div>}
+          </div>
+        )}
         {onboarding && (
           <div className="rounded-lg bg-zinc-50 p-4">
             <label className="label" htmlFor="wish">Describe it in one line (optional)</label>
