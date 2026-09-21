@@ -1,6 +1,24 @@
-# Opportunity Hunter
+# 🔎 Opportunity Hunter
 
-AI-powered job discovery agent. Tell it what you want; it keeps hunting, scores every listing 0–100, explains why, and tracks what you've seen, saved, applied to and rejected.
+**An AI agent that hunts for jobs so you don't have to.** Tell it what you want once — it continuously searches live listings, scores every match 0–100 against your profile, explains *why* it fits, and tracks each one from saved to offer.
+
+🌐 **Live:** [opportunityhunter.xyz](https://opportunityhunter.xyz)
+
+![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=next.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38BDF8?logo=tailwindcss&logoColor=white)
+![Voyage AI](https://img.shields.io/badge/Embeddings-Voyage%20AI-0D8A80)
+
+---
+
+## Highlights
+
+- **Semantic matching** — skills and roles are compared by *meaning* using Voyage embeddings, so a "React" skill matches a "Next.js" listing. Degrades gracefully to exact-text matching with no API key. → [how it works](#how-matching-works)
+- **Explainable scores** — every 0–100 score ships with what matched, what's missing, and cross-domain guards so a doctor's profile never matches a developer role.
+- **Autonomous agent** — profile → query → fetch → de-duplicate → score → explain → notify, on a schedule, whether or not you're logged in.
+- **Profession-agnostic** — works for nurses, analysts and designers, not just engineers.
+- **A complete product** — authentication, onboarding, an application tracker, email digests, Razorpay billing and an admin surface.
 
 ## Run it
 
