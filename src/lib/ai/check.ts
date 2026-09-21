@@ -8,6 +8,7 @@ import { demoSource } from "../sources/demo.ts";
 import { pickApply } from "../sources/jsearch.ts";
 import { looksLikePdf } from "./resume.ts";
 import { classifyLinkStatus } from "../linkcheck.ts";
+import { onboardingWelcome } from "../welcome.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -141,5 +142,11 @@ const ward = normalizeOpportunity({
 });
 assert.ok(calculateMatchScore(doctorProfile, ward).score >= 70, "physician listing scores well for a doctor profile");
 assert.ok(calculateMatchScore(doctorProfile, ward).role_score >= 80, "Doctor/Physician aliases match a consultant physician title");
+
+const emptyFeed = onboardingWelcome("no-sources", 0);
+assert.match(emptyFeed.title, /waiting on listings/i);
+assert.ok(!/scored every opportunity/i.test(emptyFeed.body), "empty feed must not claim listings were scored");
+assert.match(onboardingWelcome("ok", 0, "daily").body, /cleared your match bar/);
+assert.match(onboardingWelcome("ok", 3, "twice_daily").body, /twice a day/);
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);
