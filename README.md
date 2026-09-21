@@ -54,6 +54,20 @@ Required settings:
 | `ADMIN_EMAILS` | Your email. **There is no default admin in production.** |
 | `APP_URL` | Public URL — used in digest links and the Google OAuth callback. |
 
+## Production checklist
+
+The app is a **single Node process + persistent disk**. Walk this list before inviting strangers.
+
+1. **Host** — Railway / Render / Fly / VPS. Not Vercel. `DATABASE_PATH` on a volume. Exactly one instance, or disable the in-process scheduler and hit `POST /api/cron/hunt`.
+2. **Inventory** — `RAPIDAPI_KEY`. Without it the live pool is empty. Watch `RAPIDAPI_MONTHLY_CALLS`.
+3. **Email** — Gmail app password or Resend + `EMAIL_FROM`. Otherwise digests and reset links stay in the server log.
+4. **Admin** — `ADMIN_EMAILS` set; `SEED_DEMO` off unless you want the published demo password live.
+5. **Payments (optional)** — `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` + webhook secret on `/api/razorpay/webhook` for `order.paid`. `RAZORPAY_INTERNATIONAL=true` for $10 outside India.
+6. **Resume import (optional)** — `ANTHROPIC_API_KEY`.
+7. **Copy** — Pro is a 30-day pass: unlimited matches + digest. There is still one search profile per user.
+
+Doctor, nurse and other non-software titles search JSearch as those titles (not as “X engineer”). Scoring will not treat a software listing as a match for a physician profile.
+
 **Run exactly one instance.** The scheduler and rate limiter live in process, so a second instance would
 double-hunt and halve the rate limits. To scale out, disable the in-process scheduler and drive
 `POST /api/cron/hunt` (Bearer `CRON_SECRET`) from an external scheduler instead.

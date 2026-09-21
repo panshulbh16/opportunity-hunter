@@ -101,7 +101,7 @@ export function ProfileForm({ initial, mode, resumeImport = false }: { initial: 
             </div>
           </div>
         )}
-        <div><label className="label">Desired job titles</label><TagInput name="roles" value={v.roles} onChange={set("roles")} placeholder="Registered Nurse, Accountant, Product Designer…" suggestions={ROLE_SUGGESTIONS} /></div>
+        <div><label className="label">Desired job titles</label><TagInput name="roles" value={v.roles} onChange={set("roles")} placeholder="Software Engineer, Physician, Product Designer…" suggestions={ROLE_SUGGESTIONS} /></div>
         <div><label className="label">Skills</label><TagInput name="skills" value={v.skills} onChange={set("skills")} placeholder="Patient Care, Excel, SEO, Figma…" suggestions={SKILL_SUGGESTIONS} /></div>
         <div className="grid gap-5 sm:grid-cols-2">
           <div><label className="label">Keywords</label><TagInput name="keywords" value={v.keywords} onChange={set("keywords")} placeholder="e.g. startup, remote, part-time" /><p className="hint">Boosts listings that mention these.</p></div>

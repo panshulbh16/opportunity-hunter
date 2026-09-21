@@ -19,12 +19,9 @@ export const PLANS = {
     features: [
       "Unlimited opportunities",
       "Continuous monitoring",
-      "Advanced AI matching",
       "Daily digest",
-      "Multiple search profiles",
-      "Advanced filters",
       "Application tracking",
-      "AI opportunity analysis",
+      "Match explanations on every listing",
     ],
   },
 } as const;
