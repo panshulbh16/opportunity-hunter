@@ -7,6 +7,8 @@ import { OpportunityCard } from "@/components/OpportunityCard";
 import { RunSearchButton } from "@/components/RunSearchButton";
 import { UpgradeButton } from "@/components/UpgradeButton";
 import { PoolHealthBanner } from "@/components/PoolHealthBanner";
+import { poolHealth } from "@/lib/agent";
+import { onboardingWelcome } from "@/lib/welcome";
 
 export const metadata = { title: "Dashboard" };
 
@@ -17,14 +19,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const profile = getProfile(user.id);
   const best = listMatches(user.id, { limit: 6 });
   const remaining = remainingDiscoveries(user.id, user.subscription_plan);
+  const health = poolHealth();
+  const intro = onboardingWelcome(health.kind, best.length, profile?.search_frequency);
   const cards = [["New Opportunities", stats.newOpps, "/opportunities"], ["High Matches", stats.highMatches, "/opportunities?minScore=80"], ["Saved", stats.saved, "/opportunities?status=saved"], ["Applications", stats.applications, "/applications"], ["Follow-ups", stats.followUps, "/applications"]] as const;
 
   return (
     <>
       {welcome && (
         <div className="mb-6 rounded-xl bg-zinc-900 p-5 text-white rise-in">
-          <p className="font-semibold">Your first hunt is done.</p>
-          <p className="mt-1 text-sm text-zinc-300">The agent scored every opportunity it found against your profile. It will keep hunting {profile?.search_frequency === "weekly" ? "weekly" : profile?.search_frequency === "twice_daily" ? "twice a day" : "daily"} from here.</p>
+          <p className="font-semibold">{intro.title}</p>
+          <p className="mt-1 text-sm text-zinc-300">{intro.body}</p>
         </div>
       )}
       <PageHeader title={`Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${user.name.split(" ")[0]}`} description={profile?.last_run_at ? `Last hunt ${timeAgo(profile.last_run_at)} · next one runs ${profile.search_frequency.replace("_", " ")}` : "The agent hasn't run yet."}>
