@@ -14,6 +14,7 @@ import { billingCurrency, PLANS, paymentsConfigured, type BillingCurrency, type 
 import { getProfile } from "@/lib/queries";
 import { createOrder, markOrderPaid, paymentSignatureValid } from "@/lib/razorpay";
 import { extractProfileFromResume, looksLikePdf, RESUME_MAX_BYTES, resumeImportConfigured, type ResumeProfile } from "@/lib/ai/resume";
+import { profileFromResume, scoreAgainstProfile, type LandingMatchView } from "@/lib/landingMatch";
 
 export type ActionState = { error?: string; ok?: string } | undefined;
 
@@ -114,6 +115,24 @@ export async function importResume(fd: FormData): Promise<{ profile?: ResumeProf
     const profile = await extractProfileFromResume(bytes);
     track("resume_imported", user!.id, { skills: profile.skills.length, roles: profile.roles.length });
     return { profile };
+  });
+}
+
+/** Public landing preview: score a listing from a resume without creating an account. PDF is not stored. */
+export async function previewResumeMatch(fd: FormData): Promise<{ match?: LandingMatchView; error?: string }> {
+  return guard(async () => {
+    if (!resumeImportConfigured) fail("Resume scoring isn't available yet. Create an account and fill in your profile instead.");
+    await rateLimit("resume-preview", 5, 600);
+    const file = fd.get("resume");
+    if (!(file instanceof File) || file.size === 0) fail("Choose your resume as a PDF file.");
+    const f = file as File;
+    if (f.size > RESUME_MAX_BYTES) fail("That PDF is over 5 MB. Export a smaller copy and try again.");
+    const bytes = Buffer.from(await f.arrayBuffer());
+    if (!looksLikePdf(bytes)) fail("That file isn't a PDF. Save your resume as a PDF and try again.");
+    const extracted = await extractProfileFromResume(bytes);
+    if (!extracted.roles.length && !extracted.skills.length) fail("Couldn't find roles or skills on that resume. Fill in the form after you sign up.");
+    track("resume_preview", null, { skills: extracted.skills.length, roles: extracted.roles.length });
+    return { match: scoreAgainstProfile(profileFromResume(extracted), "resume") };
   });
 }
 

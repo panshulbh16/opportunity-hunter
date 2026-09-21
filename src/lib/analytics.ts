@@ -17,7 +17,8 @@ export type EventName =
   | "free_limit_hit"
   | "notification_sent"
   | "password_reset_issued"
-  | "resume_imported";
+  | "resume_imported"
+  | "resume_preview";
 
 // ponytail: events land in SQLite; forward to PostHog/Segment from here when needed
 export function track(name: EventName, userId: number | null, props: Record<string, unknown> = {}) {

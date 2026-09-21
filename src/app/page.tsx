@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { getUser } from "@/lib/auth";
-import { Check, Logo, ScoreBadge, Warn } from "@/components/ui";
+import { Check, Logo } from "@/components/ui";
 import { LEGAL_LINKS } from "@/components/LegalPage";
+import { LandingMatchPreview } from "@/components/LandingMatchPreview";
+import { resumeImportConfigured } from "@/lib/ai/resume";
+import { getProfile, listMatches } from "@/lib/queries";
+import { formatSalary } from "@/lib/ai";
+import { sampleLandingMatch, scoreAgainstProfile, type LandingMatchView } from "@/lib/landingMatch";
 
 const STEPS = [
   ["Tell us what you want", "Roles, skills, location, salary and the kind of company you'd join. Two minutes, once."],
@@ -11,7 +16,7 @@ const STEPS = [
 ];
 
 const FEATURES = [
-  ["AI Match Score", "Skills, role, experience, location, salary and preferences — weighed into one honest number."],
+  ["AI Match Score", "The number is calculated from the resume or search profile you save — skills, role, experience, location and salary — not a canned 92%."],
   ["Continuous Opportunity Monitoring", "Daily, twice daily or weekly. The hunt runs whether or not you log in."],
   ["Duplicate Removal", "The same job on three boards shows up once, with the earliest posting."],
   ["Personalized Match Explanation", "Every score comes with why it matches and what could hold you back."],
@@ -21,6 +26,24 @@ const FEATURES = [
 
 export default async function Landing() {
   const user = await getUser();
+  const profile = user ? getProfile(user.id) : null;
+  const top = user ? listMatches(user.id, { limit: 1 })[0] : undefined;
+  let initial: LandingMatchView;
+  if (top?.match) {
+    const o = top.opp, m = top.match;
+    initial = {
+      title: o.title, company: o.company, location: o.location,
+      salary: formatSalary(o) || "Salary not listed",
+      employment: o.employment_type === "full-time" ? "Full-time" : o.employment_type,
+      score: m.score, strengths: m.explanation.strengths.slice(0, 4), gaps: m.explanation.gaps.slice(0, 2),
+      caption: `Scored against your search profile${profile?.current_role || profile?.roles[0] ? `: ${profile.current_role || profile.roles[0]}${profile.years_experience ? ` · ${profile.years_experience} years` : ""}` : ""}.`,
+      ctaHref: `/opportunities/${o.id}`, ctaLabel: "View Opportunity",
+    };
+  } else if (profile) {
+    initial = scoreAgainstProfile(profile, "profile", { href: "/dashboard", label: "Open dashboard" });
+  } else {
+    initial = sampleLandingMatch();
+  }
   return (
     <div className="min-h-screen bg-white">
       <header className="sticky top-0 z-20 border-b border-zinc-100 bg-white/80 backdrop-blur">
@@ -63,30 +86,12 @@ export default async function Landing() {
                 A score without a reason is noise. Every opportunity comes with what matched, what didn&apos;t, and what to do about it — so you can decide in seconds, not after reading a 900-word description.
               </p>
               <ul className="mt-8 space-y-3 text-sm text-zinc-700">
-                {["Scored against your real profile, not keywords", "Gaps called out before you apply", "Rejected listings never come back"].map((t) => (
+                {["Scored against your resume or search profile, not a canned number", "Gaps called out before you apply", "Rejected listings never come back"].map((t) => (
                   <li key={t} className="flex gap-3"><Check className="mt-0.5 h-4 w-4 text-emerald-600" />{t}</li>
                 ))}
               </ul>
             </div>
-            <div className="card p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_16px_40px_-20px_rgba(0,0,0,0.2)]">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-[15px] font-semibold text-zinc-900">Software Engineer — Backend</h3>
-                  <p className="mt-0.5 text-sm text-zinc-600">Northwind Labs</p>
-                </div>
-                <ScoreBadge score={92} />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-x-4 text-[13px] text-zinc-500"><span>Bengaluru, India</span><span className="font-medium text-zinc-700">₹25–35 LPA</span><span>Full-time</span></div>
-              <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-zinc-500">Why this matches</p>
-              <ul className="mt-2 space-y-1.5 text-[13px] text-zinc-700">
-                {["Python and TypeScript", "4+ years experience", "Bengaluru preference", "Backend title match"].map((t) => (
-                  <li key={t} className="flex gap-2"><Check className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />{t}</li>
-                ))}
-              </ul>
-              <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">Potential concern</p>
-              <ul className="mt-2 text-[13px] text-zinc-600"><li className="flex gap-2"><Warn className="mt-0.5 h-3.5 w-3.5 text-amber-500" />On-call rotation</li></ul>
-              <div className="mt-5 border-t border-zinc-100 pt-4"><Link href="/signup" className="btn-primary btn-sm">View Opportunity</Link></div>
-            </div>
+            <LandingMatchPreview initial={initial} resumeImport={resumeImportConfigured && !top?.match} />
           </div>
         </div>
       </section>
