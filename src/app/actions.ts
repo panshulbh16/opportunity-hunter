@@ -167,10 +167,20 @@ export async function runSearchNow(): Promise<ActionState> {
   return guard(async () => {
     const user = await requireUser();
     await rateLimit("hunt", 6, 300);
-    await refreshPool();
+    const pool = await refreshPool();
     const r = await runHunt(user.id);
     revalidatePath("/", "layout");
-    return { ok: r.newMatches ? `Found ${r.newMatches} new ${r.newMatches === 1 ? "opportunity" : "opportunities"}${r.limited ? " (weekly limit reached)" : ""}.` : r.limited ? "New matches found, but you've used this week's free opportunities. Your limit resets weekly." : "No new opportunities right now. We'll keep hunting." };
+    if (pool === "no-sources") {
+      return { error: "The live job feed is not connected (RAPIDAPI_KEY). Hunts cannot pull listings until it is set." };
+    }
+    if (r.newMatches) {
+      return { ok: `Found ${r.newMatches} new ${r.newMatches === 1 ? "opportunity" : "opportunities"}${r.limited ? " (weekly limit reached)" : ""}.` };
+    }
+    if (r.limited) return { ok: "New matches found, but you've used this week's free opportunities. Your limit resets weekly." };
+    if (pool === "budget") {
+      return { error: "This month's job-feed budget is used. We'll keep matching you against listings already in the pool." };
+    }
+    return { ok: "No new opportunities right now. We'll keep hunting." };
   });
 }
 

@@ -3,6 +3,7 @@ import { getProfile, listOpportunities, listSaved, type Filters } from "@/lib/qu
 import { calculateMatchScore } from "@/lib/ai";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
+import { PoolHealthBanner } from "@/components/PoolHealthBanner";
 
 export const metadata = { title: "Opportunities" };
 
@@ -29,6 +30,7 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
       <PageHeader title={sp.status === "saved" ? "Saved opportunities" : sp.status === "rejected" ? "Rejected opportunities" : "Opportunities"} description={`${items.length} ${items.length === 1 ? "listing" : "listings"}${!sp.status ? ` · ${matched} matched to your profile` : ""}${active ? ` · ${active} ${active === 1 ? "filter" : "filters"} active` : ""}`}>
         {sp.hidden && <span className="text-sm text-zinc-500">Hid {sp.hidden} similar {sp.hidden === "1" ? "opportunity" : "opportunities"}.</span>}
       </PageHeader>
+      {!sp.status && <PoolHealthBanner audience="user" />}
 
       <form className="card mb-6 p-4" method="get">
         {sp.status && <input type="hidden" name="status" value={sp.status} />}
@@ -72,7 +74,7 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
       ) : sp.status === "rejected" ? (
         <EmptyState title="Nothing rejected." body="Opportunities you reject stay here and never come back to your feed." />
       ) : (
-        <EmptyState title={active ? "No opportunities match these filters." : "No opportunities gathered yet."} body={active ? "Try loosening a filter or two." : "Run a search from the dashboard and every tech job the agent finds will show up here."} cta={active ? "Clear filters" : "Go to dashboard"} href={active ? "/opportunities" : "/dashboard"} />
+        <EmptyState title={active ? "No opportunities match these filters." : "No opportunities gathered yet."} body={active ? "Try loosening a filter or two." : "Run a search from the dashboard. Listings the agent pulls for your titles — software, medicine, and everything else — show up here."} cta={active ? "Clear filters" : "Go to dashboard"} href={active ? "/opportunities" : "/dashboard"} />
       )}
     </>
   );
