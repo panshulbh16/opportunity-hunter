@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { getProfile, listOpportunities, listSaved, type Filters } from "@/lib/queries";
-import { calculateMatchScore } from "@/lib/ai";
+import { calculateMatchScore, warmForScoring } from "@/lib/ai";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { PoolHealthBanner } from "@/components/PoolHealthBanner";
@@ -21,7 +21,11 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
   const items = sp.status === "saved" ? listSaved(user.id) : listOpportunities(user.id, f);
   const profile = getProfile(user.id);
   // Pro: score unscored listings on the fly for display; persisted only when the listing is opened.
-  if (user.subscription_plan === "pro" && profile) for (const it of items) if (!it.match) it.liveScore = calculateMatchScore(profile, it.opp).score;
+  if (user.subscription_plan === "pro" && profile) {
+    const unscored = items.filter((it) => !it.match);
+    await warmForScoring(profile, unscored.map((it) => it.opp));
+    for (const it of unscored) it.liveScore = calculateMatchScore(profile, it.opp).score;
+  }
   const active = Object.entries(sp).filter(([k, v]) => v && k !== "sort" && k !== "hidden" && k !== "status").length;
   const matched = items.filter((i) => i.match).length;
 

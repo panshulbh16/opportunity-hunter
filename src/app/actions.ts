@@ -132,7 +132,7 @@ export async function previewResumeMatch(fd: FormData): Promise<{ match?: Landin
     const extracted = await extractProfileFromResume(bytes);
     if (!extracted.roles.length && !extracted.skills.length) fail("Couldn't find roles or skills on that resume. Fill in the form after you sign up.");
     track("resume_preview", null, { skills: extracted.skills.length, roles: extracted.roles.length });
-    return { match: scoreAgainstProfile(profileFromResume(extracted), "resume") };
+    return { match: await scoreAgainstProfile(profileFromResume(extracted), "resume") };
   });
 }
 

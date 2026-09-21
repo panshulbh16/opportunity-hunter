@@ -8,7 +8,7 @@ import type { SearchQuery, SourceAdapter } from "./sources/types";
 import { MAX_QUERIES_PER_RUN } from "./sources/jsearch";
 import {
   calculateMatchScore, deduplicateOpportunities, generateDailyDigest, generateMatchExplanation, generateSearchQueries,
-  normalizeOpportunity, type NormalizedOpportunity, type Opportunity,
+  normalizeOpportunity, warmForScoring, type NormalizedOpportunity, type Opportunity,
 } from "./ai";
 import { getProfile, parseOpp } from "./queries";
 
@@ -174,6 +174,7 @@ export async function runHunt(userId: number): Promise<HuntResult> {
       AND NOT EXISTS (SELECT 1 FROM matches m WHERE m.user_id = ? AND m.opportunity_id = o.id) ORDER BY o.posted_date DESC`)
     .all(profile.category ?? "job", `-${MAX_LISTING_AGE_DAYS} days`, userId) as Record<string, unknown>[]).map(parseOpp);
 
+  await warmForScoring(profile, candidates);
   const scored = candidates
     .map((opp) => ({ opp, b: calculateMatchScore(profile, opp) }))
     .filter(({ b }) => !b.excluded && b.score >= MIN_RELEVANT_SCORE)
@@ -213,9 +214,10 @@ export async function runHunt(userId: number): Promise<HuntResult> {
 }
 
 /** Score one listing for a user on demand (Pro users opening an unscored listing) and persist the match. */
-export function evaluateForUser(userId: number, opp: Opportunity) {
+export async function evaluateForUser(userId: number, opp: Opportunity) {
   const profile = getProfile(userId);
   if (!profile) return null;
+  await warmForScoring(profile, [opp]);
   const b = calculateMatchScore(profile, opp);
   const explanation = generateMatchExplanation(profile, opp, b);
   db.prepare(`INSERT OR IGNORE INTO matches (user_id, opportunity_id, score, skills_score, experience_score, location_score, salary_score,
