@@ -9,6 +9,7 @@ import { pickApply } from "../sources/jsearch.ts";
 import { looksLikePdf } from "./resume.ts";
 import { classifyLinkStatus } from "../linkcheck.ts";
 import { onboardingWelcome } from "../welcome.ts";
+import { profileFromResume, SAMPLE_RESUME, sampleLandingMatch, scoreAgainstProfile } from "../landingMatch.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -148,5 +149,19 @@ assert.match(emptyFeed.title, /waiting on listings/i);
 assert.ok(!/scored every opportunity/i.test(emptyFeed.body), "empty feed must not claim listings were scored");
 assert.match(onboardingWelcome("ok", 0, "daily").body, /cleared your match bar/);
 assert.match(onboardingWelcome("ok", 3, "twice_daily").body, /twice a day/);
+
+const landing = sampleLandingMatch();
+const landingAgain = scoreAgainstProfile(profileFromResume(SAMPLE_RESUME), "sample");
+assert.equal(landing.score, landingAgain.score, "landing % is the engine, not a hardcoded 92");
+assert.ok(landing.strengths.some((s) => /Python|TypeScript|Backend/i.test(s)), "strengths name resume skills or title");
+assert.match(landing.caption, /resume/i);
+const doctorLanding = scoreAgainstProfile(profileFromResume({
+  ...SAMPLE_RESUME,
+  roles: ["Physician"], skills: ["Patient Care", "MBBS", "ACLS", "BLS", "Clinical Practice"],
+  current_role: "Physician at City Hospital", education: "MBBS", locations: ["Mumbai, India"],
+}), "resume");
+assert.match(doctorLanding.title, /Physician/i);
+assert.ok(!/Software Engineer/i.test(doctorLanding.title), "clinical resume must not preview a software listing");
+assert.ok(doctorLanding.score >= 70);
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);
