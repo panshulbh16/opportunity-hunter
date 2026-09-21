@@ -39,10 +39,13 @@ function put(text: string, raw: number[]) {
 }
 
 async function embed(texts: string[]): Promise<number[][]> {
+  // Hard timeout: a hanging embedding call must never block a page render or a healthcheck —
+  // on timeout we throw, the caller swallows it, and scoring falls back to exact match.
   const res = await fetch(ENDPOINT, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` },
     body: JSON.stringify({ input: texts, model: MODEL, input_type: "document" }),
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`voyage ${res.status}: ${await res.text().catch(() => "")}`);
   const json = (await res.json()) as { data: { embedding: number[] }[] };
