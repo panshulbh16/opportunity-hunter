@@ -1,7 +1,7 @@
 // Self-check for the matching engine: `npm run check`. Fails loudly if scoring/dedupe/parsing regress.
 import assert from "node:assert/strict";
 import {
-  calculateMatchScore, deduplicateOpportunities, mergeImportedProfile, generateApplicationDraft, generateMatchExplanation, normalizeOpportunity, parseSalary,
+  calculateMatchScore, deduplicateOpportunities, mergeImportedProfile, generateApplicationDraft, generateMatchExplanation, generateSearchQueries, normalizeOpportunity, parseSalary,
   parseSearchProfile, recommendNextAction, type Profile,
 } from "./index.ts";
 import { demoSource } from "../sources/demo.ts";
@@ -112,5 +112,34 @@ assert.equal(classifyLinkStatus(410), "closed");
 assert.equal(classifyLinkStatus(200), "alive");
 assert.equal(classifyLinkStatus(301), "alive");
 for (const blocked of [401, 403, 429, 500, 0]) assert.equal(classifyLinkStatus(blocked), "unknown", `${blocked} is not proof the job is gone`);
+
+// Doctor / physician search: don't fall back to "software engineer", and don't match SWE listings.
+const doctorWish = parseSearchProfile("Doctor jobs in Mumbai, 5 years, MBBS. Minimum salary ₹12 LPA.");
+assert.ok(doctorWish.roles?.some((r) => /physician|doctor|medical officer/i.test(r)), "free-text 'doctor' becomes a medical role");
+assert.ok(doctorWish.locations?.some((l) => /Mumbai/i.test(l)));
+const doctorProfile: Profile = {
+  ...profile,
+  roles: ["Physician", "Doctor"],
+  skills: ["Patient Care", "MBBS", "Clinical Practice", "ACLS", "BLS"],
+  keywords: [], industries: ["Healthcare"], companies: [], excluded_companies: [], excluded_keywords: [],
+  years_experience: 5, current_role: "Physician", education: "MBBS", seniority: "mid",
+  locations: ["Mumbai, India"], remote_preference: ["onsite"], salary_min: 1200000, salary_max: null, currency: "INR",
+  salary_period: "year", employment_types: ["full-time"], preferences: [],
+};
+const doctorQs = generateSearchQueries(doctorProfile);
+assert.ok(doctorQs.some((q) => /physician|doctor|medical officer/i.test(q.q)), "JSearch queries use doctor/physician wording");
+assert.ok(!doctorQs.some((q) => /engineer/i.test(q.q)), "doctor hunt must not search for engineers");
+const skillOnly = generateSearchQueries({ ...doctorProfile, roles: [], skills: ["Patient Care"] });
+assert.ok(skillOnly.every((q) => !/engineer/i.test(q.q)), "empty titles + a clinical skill is not '{skill} engineer'");
+assert.ok(calculateMatchScore(doctorProfile, byTitle("Senior Python AI Engineer")).score < 40, "a doctor profile must not match a software job");
+const ward = normalizeOpportunity({
+  source_name: "test", source_url: "https://example.com/physician", title: "Consultant Physician — Internal Medicine",
+  company: "City Hospital", location: "Mumbai, India", salary: "₹12–18 LPA",
+  description: "MBBS MD Internal Medicine. OPD and IPD patient care, ACLS, BLS. 3+ years as a physician or medical officer.",
+  posted_date: "2026-06-01", application_url: "https://example.com/physician", employment_type: "full-time",
+  country: "India", remote_type: "onsite", industry: "Healthcare",
+});
+assert.ok(calculateMatchScore(doctorProfile, ward).score >= 70, "physician listing scores well for a doctor profile");
+assert.ok(calculateMatchScore(doctorProfile, ward).role_score >= 80, "Doctor/Physician aliases match a consultant physician title");
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);

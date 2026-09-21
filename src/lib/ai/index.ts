@@ -103,6 +103,7 @@ export const KNOWN_SKILLS = [
   "Patient Care", "Nursing", "Cardiology", "Pediatrics", "Radiology", "Surgery", "Oncology", "Anesthesia",
   "Emergency Medicine", "Clinical Research", "Phlebotomy", "ACLS", "BLS", "Medication Administration", "Physiotherapy",
   "Pharmacology", "Public Health", "Mental Health", "Dentistry", "EMR", "Diagnostics", "Nutrition",
+  "MBBS", "Clinical Practice", "Internal Medicine", "General Medicine",
   // Finance & accounting
   "Accounting", "Bookkeeping", "Financial Modeling", "Financial Analysis", "Auditing", "Taxation", "QuickBooks",
   "GAAP", "Budgeting", "Payroll", "Accounts Payable", "Accounts Receivable", "Investment Analysis", "Risk Management",
@@ -154,9 +155,13 @@ const normText = (s: string) => s.toLowerCase().replace(/[^a-z0-9+#.\s]/g, " ").
 const ROLE_PHRASES: [RegExp, string][] = [
   [/machine[\s-]*learning/g, "ml"], [/artificial intelligence/g, "ml"], [/\bgen(erative)?[\s-]*ai\b/g, "ml"],
   [/\bai\b/g, "ml"], [/large language models?/g, "llm"],
+  [/\bmedical officers?\b/g, "physician"], [/\bdoctors?\b/g, "physician"], [/\bclinicians?\b/g, "physician"],
 ];
 const ROLE_STOP = new Set(["engineer", "developer", "programmer", "dev", "senior", "junior", "staff", "principal", "lead",
-  "sr", "jr", "the", "of", "and", "for", "a", "an", "remote", "hybrid", "onsite", "i", "ii", "iii", "iv", "engineering"]);
+  "sr", "jr", "the", "of", "and", "for", "a", "an", "remote", "hybrid", "onsite", "i", "ii", "iii", "iv", "engineering",
+  "consultant", "resident", "registrar"]);
+
+export type RoleFamily = "management" | "engineering" | "healthcare" | "finance" | "other";
 
 function roleTokens(s: string) {
   let t = normText(s.replace(/\(.*?\)/g, ""));
@@ -164,9 +169,11 @@ function roleTokens(s: string) {
   return new Set(t.split(" ").filter((w) => w && !ROLE_STOP.has(w)));
 }
 
-function roleFamily(s: string): "management" | "engineering" | "other" {
+function roleFamily(s: string): RoleFamily {
   const t = s.toLowerCase();
-  if (/\b(manager|director|head of|vp|vice president|chief)\b/.test(t)) return "management";
+  if (/\b(manager|director|head of|vp|vice president|chief)\b/.test(t) && !/\b(medical officer|nursing)\b/.test(t)) return "management";
+  if (/\b(nurse|nursing|physician|doctor|surgeon|pharmacist|clinician|mbbs|dentist|physiotherap|anesthet|anaesthet|medical officer)\b/.test(t)) return "healthcare";
+  if (/\b(accountant|auditor|bookkeep|financial analyst|chartered accountant|cpa)\b/.test(t)) return "finance";
   if (/\b(engineer|developer|programmer|scientist|architect|researcher|dev)\b/.test(t)) return "engineering";
   return "other";
 }
@@ -253,7 +260,7 @@ export function parseSearchProfile(text: string): Partial<Profile> {
   if (/\bdevops\b/.test(t)) roles.push("DevOps Engineer");
   // Healthcare, finance, marketing, design, legal, education, HR — best-effort for the one-line prefill.
   if (/\b(nurse|nursing)\b/.test(t)) roles.push("Registered Nurse");
-  if (/\b(doctor|physician|medical officer|clinician)\b/.test(t)) roles.push("Physician");
+  if (/\b(doctor|physician|medical officer|clinician|mbbs)\b/.test(t)) roles.push("Physician", "Doctor", "Medical Officer");
   if (/\b(pharmacist|pharmacy)\b/.test(t)) roles.push("Pharmacist");
   if (/\b(accountant|accounting)\b/.test(t)) roles.push("Accountant");
   if (/\b(financial analyst|finance)\b/.test(t)) roles.push("Financial Analyst");
@@ -332,17 +339,33 @@ export function mergeImportedProfile<P extends ImportedProfile>(prev: P, found: 
   };
 }
 
+/** Extra JSearch phrasings for roles whose job-board wording varies. */
+function searchAliases(role: string): string[] {
+  const k = role.toLowerCase();
+  if (/\b(physician|doctor|medical officer|clinician)\b/.test(k)) return ["Physician", "Doctor", "Medical Officer"];
+  if (/\bnurse\b/.test(k)) return ["Registered Nurse", "Staff Nurse"];
+  return [role];
+}
+
 /** Roles × locations, capped, so a source adapter can run targeted searches. */
 export function generateSearchQueries(p: Profile): SearchQuery[] {
-  const roles = p.roles.length ? p.roles : [p.skills[0] ? `${p.skills[0]} engineer` : "software engineer"];
+  const roles = p.roles.length ? p.roles : p.skills.length ? p.skills.slice(0, 2) : [];
   const wantsRemote = p.remote_preference.includes("remote") || p.preferences.includes("remote_only");
   const locs = p.locations.length ? p.locations : [""];
   const out: SearchQuery[] = [];
-  for (const r of roles.slice(0, 4)) {
-    if (wantsRemote) out.push({ q: r, remote: true });
-    for (const l of locs.slice(0, 3)) if (l && l !== "Global") out.push({ q: r, location: l });
+  const seen = new Set<string>();
+  const push = (q: SearchQuery) => {
+    const key = `${q.q}|${q.location ?? ""}|${q.remote ?? false}`.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(q);
+  };
+  for (const r of roles.flatMap(searchAliases).slice(0, 6)) {
+    if (wantsRemote) push({ q: r, remote: true });
+    for (const l of locs.slice(0, 3)) if (l && l !== "Global") push({ q: r, location: l });
   }
-  for (const k of p.keywords.slice(0, 3)) out.push({ q: `${k} ${roles[0]}`.trim(), remote: wantsRemote });
+  const head = roles[0] ?? "";
+  for (const k of p.keywords.slice(0, 3)) if (head) push({ q: `${k} ${head}`.trim(), remote: wantsRemote });
   return out.slice(0, 12);
 }
 
@@ -481,6 +504,8 @@ export function calculateMatchScore(p: Profile, o: NormalizedOpportunity): Break
 
   let score = 0.3 * skills_score + 0.25 * role_score + 0.15 * experience_score + 0.15 * location_score + 0.15 * salary_score + adj;
   if (typeMismatch) score *= 0.6;
+  const profileFams = p.roles.map(roleFamily).filter((f) => f !== "other");
+  if (profileFams.length && titleFam !== "other" && !profileFams.includes(titleFam)) score = Math.min(score, 32);
   if (excluded) score = 0;
 
   return { score: clamp(score), skills_score, role_score, experience_score, location_score, salary_score, excluded,
@@ -575,7 +600,7 @@ export function generateApplicationDraft(
 ): ApplicationDraft {
   const list = (a: string[]) => (a.length <= 2 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a[a.length - 1]}`);
   const top = b.matchedSkills.slice(0, 3);
-  const role = p.current_role || "engineer";
+  const role = p.current_role || p.roles[0] || "professional";
   const years = p.years_experience;
 
   const lines = [`Hi ${o.company} team,`, ""];

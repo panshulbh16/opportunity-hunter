@@ -71,20 +71,20 @@ export default async function Landing() {
             <div className="card p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_16px_40px_-20px_rgba(0,0,0,0.2)]">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-[15px] font-semibold text-zinc-900">Registered Nurse — ICU</h3>
-                  <p className="mt-0.5 text-sm text-zinc-600">Example Hospital</p>
+                  <h3 className="text-[15px] font-semibold text-zinc-900">Software Engineer — Backend</h3>
+                  <p className="mt-0.5 text-sm text-zinc-600">Northwind Labs</p>
                 </div>
                 <ScoreBadge score={92} />
               </div>
-              <div className="mt-3 flex flex-wrap gap-x-4 text-[13px] text-zinc-500"><span>Mumbai, India</span><span className="font-medium text-zinc-700">₹6–9 LPA</span><span>Full-time</span></div>
+              <div className="mt-3 flex flex-wrap gap-x-4 text-[13px] text-zinc-500"><span>Bengaluru, India</span><span className="font-medium text-zinc-700">₹25–35 LPA</span><span>Full-time</span></div>
               <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-zinc-500">Why this matches</p>
               <ul className="mt-2 space-y-1.5 text-[13px] text-zinc-700">
-                {["Critical care experience", "BLS & ACLS certified", "4+ years experience", "Mumbai preference"].map((t) => (
+                {["Python and TypeScript", "4+ years experience", "Bengaluru preference", "Backend title match"].map((t) => (
                   <li key={t} className="flex gap-2"><Check className="mt-0.5 h-3.5 w-3.5 text-emerald-600" />{t}</li>
                 ))}
               </ul>
               <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-zinc-500">Potential concern</p>
-              <ul className="mt-2 text-[13px] text-zinc-600"><li className="flex gap-2"><Warn className="mt-0.5 h-3.5 w-3.5 text-amber-500" />Night shifts required</li></ul>
+              <ul className="mt-2 text-[13px] text-zinc-600"><li className="flex gap-2"><Warn className="mt-0.5 h-3.5 w-3.5 text-amber-500" />On-call rotation</li></ul>
               <div className="mt-5 border-t border-zinc-100 pt-4"><Link href="/signup" className="btn-primary btn-sm">View Opportunity</Link></div>
             </div>
           </div>
