@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { importResume, saveProfile, type ActionState } from "@/app/actions";
-import { KNOWN_SKILLS, mergeImportedProfile, parseSearchProfile, type Profile } from "@/lib/ai";
+import { mergeImportedProfile, parseSearchProfile, type Profile } from "@/lib/ai";
 import { TagInput } from "./TagInput";
 import { Alert } from "./ui";
 import { RunSearchButton } from "./RunSearchButton";
@@ -16,9 +16,10 @@ export const EMPTY_PROFILE: ProfileValues = {
   preferences: [], notification_threshold: 80, search_frequency: "daily", digest_enabled: 1,
 };
 
-const ROLE_SUGGESTIONS = ["AI Engineer", "Machine Learning Engineer", "Python Developer", "Backend Engineer", "Data Scientist", "Data Engineer", "Full Stack Engineer", "DevOps Engineer", "Frontend Engineer"];
+const ROLE_SUGGESTIONS = ["Software Engineer", "Registered Nurse", "Accountant", "Marketing Manager", "Product Designer", "Sales Executive", "Physician", "Data Analyst", "Teacher", "HR Manager", "Financial Analyst", "Project Manager"];
 const LOCATION_SUGGESTIONS = ["India", "Global", "Bengaluru, India", "Hyderabad, India", "Pune, India", "Mumbai, India", "Delhi NCR, India", "Singapore", "Berlin, Germany", "London, United Kingdom", "United States"];
-const INDUSTRY_SUGGESTIONS = ["AI Infrastructure", "Developer Tools", "Fintech", "Healthtech", "E-commerce", "Analytics SaaS", "Cloud Infrastructure"];
+const INDUSTRY_SUGGESTIONS = ["Healthcare", "Finance", "Technology", "Education", "Retail", "Marketing & Advertising", "Manufacturing", "Legal", "Hospitality", "Consulting"];
+const SKILL_SUGGESTIONS = ["Patient Care", "Microsoft Excel", "SEO", "Figma", "Accounting", "Project Management", "Salesforce", "Python", "Data Analysis", "Copywriting", "Nursing", "Financial Analysis", "Graphic Design", "Recruiting", "Customer Service", "Agile"];
 const SENIORITIES = ["intern", "junior", "mid", "senior", "lead", "manager", "director"];
 const STEPS = ["What are you looking for?", "Experience", "Location", "Compensation", "Preferences", "Search frequency"];
 
@@ -95,15 +96,15 @@ export function ProfileForm({ initial, mode, resumeImport = false }: { initial: 
           <div className="rounded-lg bg-zinc-50 p-4">
             <label className="label" htmlFor="wish">Describe it in one line (optional)</label>
             <div className="flex gap-2">
-              <input id="wish" value={wish} onChange={(e) => setWish(e.target.value)} className="input" placeholder="Remote Python/AI jobs in India or globally, 4 years experience, min ₹20 LPA, product companies" />
+              <input id="wish" value={wish} onChange={(e) => setWish(e.target.value)} className="input" placeholder="e.g. Remote marketing roles in India, 4+ years, min ₹8 LPA" />
               <button type="button" onClick={applyWish} disabled={!wish.trim()} className="btn-secondary shrink-0">Prefill</button>
             </div>
           </div>
         )}
-        <div><label className="label">Desired job titles</label><TagInput name="roles" value={v.roles} onChange={set("roles")} placeholder="AI Engineer, Python Developer…" suggestions={ROLE_SUGGESTIONS} /></div>
-        <div><label className="label">Skills</label><TagInput name="skills" value={v.skills} onChange={set("skills")} placeholder="Python, RAG, AWS…" suggestions={KNOWN_SKILLS.slice(0, 40)} /></div>
+        <div><label className="label">Desired job titles</label><TagInput name="roles" value={v.roles} onChange={set("roles")} placeholder="Registered Nurse, Accountant, Product Designer…" suggestions={ROLE_SUGGESTIONS} /></div>
+        <div><label className="label">Skills</label><TagInput name="skills" value={v.skills} onChange={set("skills")} placeholder="Patient Care, Excel, SEO, Figma…" suggestions={SKILL_SUGGESTIONS} /></div>
         <div className="grid gap-5 sm:grid-cols-2">
-          <div><label className="label">Keywords</label><TagInput name="keywords" value={v.keywords} onChange={set("keywords")} placeholder="GenAI, agents…" /><p className="hint">Boosts listings that mention these.</p></div>
+          <div><label className="label">Keywords</label><TagInput name="keywords" value={v.keywords} onChange={set("keywords")} placeholder="e.g. startup, remote, part-time" /><p className="hint">Boosts listings that mention these.</p></div>
           <div><label className="label">Industries</label><TagInput name="industries" value={v.industries} onChange={set("industries")} placeholder="Fintech…" suggestions={INDUSTRY_SUGGESTIONS} /></div>
           <div><label className="label">Companies to target</label><TagInput name="companies" value={v.companies} onChange={set("companies")} placeholder="Company names" /></div>
           <div><label className="label">Companies to exclude</label><TagInput name="excluded_companies" value={v.excluded_companies} onChange={set("excluded_companies")} placeholder="Never show these" /></div>
@@ -118,7 +119,7 @@ export function ProfileForm({ initial, mode, resumeImport = false }: { initial: 
             <select id="seniority" name="seniority" value={v.seniority} onChange={(e) => set("seniority")(e.target.value)} className="input">
               {SENIORITIES.map((s) => <option key={s} value={s}>{s === "mid" ? "Mid-level" : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select></div>
-          <div><label className="label" htmlFor="current_role">Current role</label><input id="current_role" name="current_role" value={v.current_role} onChange={(e) => set("current_role")(e.target.value)} className="input" placeholder="AI Engineer at …" /></div>
+          <div><label className="label" htmlFor="current_role">Current role</label><input id="current_role" name="current_role" value={v.current_role} onChange={(e) => set("current_role")(e.target.value)} className="input" placeholder="Your current job title" /></div>
           <div><label className="label" htmlFor="education">Education</label><input id="education" name="education" value={v.education} onChange={(e) => set("education")(e.target.value)} className="input" placeholder="B.Tech Computer Science" /></div>
         </div>
       </FormSection>

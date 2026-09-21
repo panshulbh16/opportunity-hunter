@@ -88,13 +88,43 @@ export type NextAction = { action: "apply" | "consider" | "skip"; label: string;
 
 // ---------- Vocab ----------
 
+// A cross-profession skill vocabulary. Used both to infer a listing's skills from its description and to
+// parse a free-text profile, so it must cover the fields Opportunity Hunter serves — not just software.
 export const KNOWN_SKILLS = [
+  // Software & data
   "Python", "Java", "Go", "Rust", "TypeScript", "JavaScript", "C++", "React", "Next.js", "Node.js", "Django", "Flask",
   "FastAPI", "SQL", "PostgreSQL", "MySQL", "Redis", "MongoDB", "AWS", "Azure", "GCP", "Docker", "Kubernetes", "Terraform",
   "Spark", "Airflow", "Kafka", "PyTorch", "TensorFlow", "Scikit-learn", "Pandas", "NLP", "Computer Vision", "LLM", "RAG",
   "Vector Databases", "LangChain", "MLOps", "MLflow", "Prompt Engineering", "Transformers", "Machine Learning",
-  "Deep Learning", "GraphQL", "REST APIs", "gRPC", "Linux", "CI/CD", "Jenkins", "Product Management", "System Design",
+  "Deep Learning", "GraphQL", "REST APIs", "gRPC", "Linux", "CI/CD", "Jenkins", "System Design",
   "Distributed Systems", "CUDA", "OpenCV", "Recommender Systems", "Spring Boot", "OpenAI API", "Anthropic API",
+  "Data Analysis", "Data Visualization", "Tableau", "Power BI", "Statistics",
+  // Healthcare & medicine
+  "Patient Care", "Nursing", "Cardiology", "Pediatrics", "Radiology", "Surgery", "Oncology", "Anesthesia",
+  "Emergency Medicine", "Clinical Research", "Phlebotomy", "ACLS", "BLS", "Medication Administration", "Physiotherapy",
+  "Pharmacology", "Public Health", "Mental Health", "Dentistry", "EMR", "Diagnostics", "Nutrition",
+  // Finance & accounting
+  "Accounting", "Bookkeeping", "Financial Modeling", "Financial Analysis", "Auditing", "Taxation", "QuickBooks",
+  "GAAP", "Budgeting", "Payroll", "Accounts Payable", "Accounts Receivable", "Investment Analysis", "Risk Management",
+  "SAP", "Microsoft Excel",
+  // Marketing & sales
+  "SEO", "SEM", "Google Ads", "Content Marketing", "Social Media Marketing", "Copywriting", "Email Marketing",
+  "Brand Management", "Market Research", "Lead Generation", "CRM", "Salesforce", "Public Relations",
+  "Business Development", "Account Management", "Negotiation",
+  // Design & creative
+  "Figma", "Adobe Photoshop", "Adobe Illustrator", "Adobe InDesign", "UI/UX Design", "Graphic Design", "Video Editing",
+  "Premiere Pro", "After Effects", "Motion Design", "Wireframing", "Prototyping",
+  // Legal
+  "Legal Research", "Litigation", "Contract Law", "Corporate Law", "Compliance", "Intellectual Property",
+  "Legal Drafting", "Paralegal",
+  // HR, operations & project delivery
+  "Recruiting", "Talent Acquisition", "Employee Relations", "Onboarding", "Operations Management", "Supply Chain",
+  "Logistics", "Procurement", "Inventory Management", "Project Management", "Product Management", "Agile", "Scrum",
+  "Six Sigma", "Stakeholder Management", "Business Analysis",
+  // Education
+  "Teaching", "Curriculum Development", "Lesson Planning", "Classroom Management", "Tutoring", "E-Learning",
+  // Customer & general
+  "Customer Service", "Customer Support", "Technical Writing", "Translation", "Microsoft Office",
 ];
 
 const SKILL_SYNONYMS: Record<string, string> = {
@@ -212,6 +242,7 @@ export function parseSearchProfile(text: string): Partial<Profile> {
   if (skills.length) p.skills = skills;
 
   const roles: string[] = [];
+  // Software
   if (/\b(ai|ml|machine learning)\b/.test(t)) roles.push("AI Engineer", "Machine Learning Engineer");
   if (/\bpython\b/.test(t)) roles.push("Python Developer");
   if (/\bbackend\b/.test(t)) roles.push("Backend Engineer");
@@ -220,6 +251,18 @@ export function parseSearchProfile(text: string): Partial<Profile> {
   if (/\bdata engineer/.test(t)) roles.push("Data Engineer");
   if (/\bfull[\s-]?stack\b/.test(t)) roles.push("Full Stack Engineer");
   if (/\bdevops\b/.test(t)) roles.push("DevOps Engineer");
+  // Healthcare, finance, marketing, design, legal, education, HR — best-effort for the one-line prefill.
+  if (/\b(nurse|nursing)\b/.test(t)) roles.push("Registered Nurse");
+  if (/\b(doctor|physician|medical officer|clinician)\b/.test(t)) roles.push("Physician");
+  if (/\b(pharmacist|pharmacy)\b/.test(t)) roles.push("Pharmacist");
+  if (/\b(accountant|accounting)\b/.test(t)) roles.push("Accountant");
+  if (/\b(financial analyst|finance)\b/.test(t)) roles.push("Financial Analyst");
+  if (/\bmarketing\b/.test(t)) roles.push("Marketing Manager");
+  if (/\bsales\b/.test(t)) roles.push("Sales Executive");
+  if (/\b(designer|design)\b/.test(t)) roles.push("Designer");
+  if (/\b(teacher|teaching|educator)\b/.test(t)) roles.push("Teacher");
+  if (/\b(hr|human resources|recruiter)\b/.test(t)) roles.push("HR / Recruiter");
+  if (/\b(lawyer|attorney|legal)\b/.test(t)) roles.push("Legal Counsel");
   if (roles.length) p.roles = [...new Set(roles)];
 
   const yrs = t.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs|yoe)/);
