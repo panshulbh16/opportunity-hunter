@@ -79,6 +79,59 @@ export function apiUsage() {
   return { callsThisMonth: runs * MAX_QUERIES_PER_RUN, budget: MONTHLY_CALL_BUDGET, lastRefresh: last, refreshHours: REFRESH_HOURS };
 }
 
+export type PoolHealth = {
+  kind: "ok" | "no-sources" | "empty" | "source-error" | "budget";
+  listings: number;
+  userMessage: string;
+  adminMessage: string;
+};
+
+/** Why the shared listing pool is empty or the feed is off — used on dashboard, opportunities, admin. */
+export function poolHealth(): PoolHealth {
+  const listings = (db.prepare("SELECT COUNT(*) n FROM opportunities").get() as { n: number }).n;
+  const last = db.prepare("SELECT status, error FROM source_runs ORDER BY id DESC LIMIT 1").get() as { status: string; error: string | null } | undefined;
+  const usage = apiUsage();
+  if (!activeSources().length) {
+    return {
+      kind: "no-sources",
+      listings,
+      userMessage: "The live job feed is not connected, so hunts cannot pull new listings. If you run this site, set RAPIDAPI_KEY and check Admin → Integrations.",
+      adminMessage: "JSearch is off. Set RAPIDAPI_KEY (RapidAPI JSearch) so hunts can pull LinkedIn/Indeed/Glassdoor listings. Until then the pool stays empty.",
+    };
+  }
+  if (last?.status === "error" && listings === 0) {
+    const err = last.error?.slice(0, 240) || "unknown error";
+    return {
+      kind: "source-error",
+      listings,
+      userMessage: "The job feed failed on the last refresh. Try Run Search Now in a few minutes, or ask the operator to check Admin → Source health.",
+      adminMessage: `Last JSearch run failed: ${err}`,
+    };
+  }
+  if (listings === 0 && usage.callsThisMonth + MAX_QUERIES_PER_RUN > usage.budget) {
+    return {
+      kind: "budget",
+      listings,
+      userMessage: "This month's job-feed budget is used up, and the pool is still empty. Existing matches will wait until the budget resets.",
+      adminMessage: `API budget exhausted (${usage.callsThisMonth}/${usage.budget}) with an empty pool. Raise RAPIDAPI_MONTHLY_CALLS or wait for next month.`,
+    };
+  }
+  if (listings === 0) {
+    return {
+      kind: "empty",
+      listings,
+      userMessage: "The shared pool has no listings yet. Run Search Now after the feed is connected, or wait for the next scheduled hunt.",
+      adminMessage: "Opportunity pool is empty. Click Run agent for all users, or wait for the 15-minute scheduler. Confirm RAPIDAPI_KEY is valid if a run already completed with 0 retrieved.",
+    };
+  }
+  return {
+    kind: "ok",
+    listings,
+    userMessage: "",
+    adminMessage: "",
+  };
+}
+
 /**
  * Refresh the shared pool if it's due and the month's API budget allows. Safe to call from anywhere —
  * it self-limits, so a burst of signups or clicks costs at most one refresh per REFRESH_HOURS.

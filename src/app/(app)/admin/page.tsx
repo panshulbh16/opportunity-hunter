@@ -6,6 +6,7 @@ import { emailConfigured } from "@/lib/email";
 import { paymentsConfigured } from "@/lib/plans";
 import { PageHeader, timeAgo } from "@/components/ui";
 import { AdminActions, PlanToggle, ResetLink } from "@/components/AdminActions";
+import { PoolHealthBanner } from "@/components/PoolHealthBanner";
 
 export const metadata = { title: "Admin" };
 
@@ -18,6 +19,7 @@ export default async function Admin() {
   return (
     <>
       <PageHeader title="Admin" description="Product health at a glance."><AdminActions /></PageHeader>
+      <PoolHealthBanner audience="admin" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         {cards.map(([l, n]) => <div key={l} className="card p-4"><p className="text-xs text-zinc-500">{l}</p><p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{n}</p></div>)}
       </div>
@@ -57,8 +59,8 @@ export default async function Admin() {
       </div>
 
       <h2 className="mt-10 mb-3 text-base font-semibold text-zinc-900">Integrations</h2>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[["Email", emailConfigured, "GMAIL_USER / _APP_PASSWORD"], ["Payments (Razorpay)", paymentsConfigured, "RAZORPAY_KEY_ID / _SECRET"], ["Google login", Boolean(process.env.GOOGLE_CLIENT_ID), "GOOGLE_CLIENT_ID / _SECRET"]].map(([l, ok, env]) => (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[["Email", emailConfigured, "GMAIL_USER / _APP_PASSWORD"], ["Payments (Razorpay)", paymentsConfigured, "RAZORPAY_KEY_ID / _SECRET"], ["Google login", Boolean(process.env.GOOGLE_CLIENT_ID), "GOOGLE_CLIENT_ID / _SECRET"], ["Live jobs (JSearch)", Boolean(process.env.RAPIDAPI_KEY), "RAPIDAPI_KEY"]].map(([l, ok, env]) => (
           <div key={String(l)} className="card p-4"><p className="text-sm font-medium text-zinc-900">{l}</p><p className={`mt-1 text-xs font-semibold ${ok ? "text-emerald-700" : "text-zinc-500"}`}>{ok ? "Configured" : `Not configured · set ${env}`}</p></div>
         ))}
       </div>

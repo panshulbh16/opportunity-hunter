@@ -6,6 +6,7 @@ import { EmptyState, PageHeader, timeAgo } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { RunSearchButton } from "@/components/RunSearchButton";
 import { UpgradeButton } from "@/components/UpgradeButton";
+import { PoolHealthBanner } from "@/components/PoolHealthBanner";
 
 export const metadata = { title: "Dashboard" };
 
@@ -29,6 +30,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <PageHeader title={`Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${user.name.split(" ")[0]}`} description={profile?.last_run_at ? `Last hunt ${timeAgo(profile.last_run_at)} · next one runs ${profile.search_frequency.replace("_", " ")}` : "The agent hasn't run yet."}>
         <RunSearchButton />
       </PageHeader>
+      <PoolHealthBanner audience="user" />
 
       {user.subscription_plan === "free" && (
         <div className={`mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${remaining === 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-zinc-200 bg-white text-zinc-600"}`}>
@@ -53,7 +55,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       {best.length ? (
         <div className="grid gap-4 lg:grid-cols-2">{best.map((item, i) => <OpportunityCard key={item.match.id} item={item} index={i} />)}</div>
       ) : (
-        <EmptyState title="No matches yet" body="The agent hasn't found anything that fits your profile. Broaden your roles or skills, or run a search now." cta="Edit search profile" href="/profile" />
+        <EmptyState title="No matches yet" body="The agent hasn't found anything that fits your profile. Broaden your roles or skills, or run a search now. If the pool itself is empty, the banner above explains why." cta="Edit search profile" href="/profile" />
       )}
     </>
   );
