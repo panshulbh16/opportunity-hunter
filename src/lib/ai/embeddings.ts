@@ -1,41 +1,39 @@
 import { db } from "../db.ts";
+import { getVec, normText, setVec } from "./embeddings-store.ts";
+import { profileSummaryText, type NormalizedOpportunity, type Profile } from "./index.ts";
 
-// Semantic layer for matching. Embeddings are expensive network calls, but the scorer
-// (calculateMatchScore) is synchronous and runs in a hot loop over every candidate, so we
-// never embed inside it. Instead: warmEmbeddings() embeds any new strings once, up front and
-// async, into a persistent SQLite cache; the scorer then reads vectors synchronously from an
-// in-memory map. No VOYAGE_API_KEY → warm is a no-op, vectors are absent, and every semantic
-// helper returns null so callers fall back to the exact-match logic unchanged.
+// Server-only half of the semantic layer: the persistent SQLite cache and the Voyage calls that fill
+// the in-memory store (embeddings-store.ts). Embeddings are expensive network calls and the scorer is
+// synchronous, so we never embed inside it: warmEmbeddings/warmForScoring embed new strings once, up
+// front and async, into SQLite + the store; the scorer then reads vectors synchronously from the store.
+// No VOYAGE_API_KEY → warm is a no-op, the store stays empty, and every similarity() returns null so
+// matching falls back to exact text unchanged.
 
 const MODEL = process.env.VOYAGE_MODEL ?? "voyage-3.5-lite";
 const KEY = process.env.VOYAGE_API_KEY;
 const ENDPOINT = "https://api.voyageai.com/v1/embeddings";
 
 export const embeddingsEnabled = !!KEY;
+export { similarity, bestSimilarity } from "./embeddings-store.ts";
 
-// text -> unit-normalized vector. ponytail: whole cache lives in memory (a few MB for this app's
-// skill/role/description vocabulary); shard or an ANN index only if the table grows past ~1e5 rows.
-let mem: Map<string, Float32Array> | null = null;
-
-function load(): Map<string, Float32Array> {
-  if (mem) return mem;
-  mem = new Map();
+// Persisted vectors are loaded into the store once per process. ponytail: the whole cache lives in
+// memory (a few MB for this app's skill/role/description vocabulary); add an ANN index only past ~1e5 rows.
+let loaded = false;
+function loadOnce() {
+  if (loaded) return;
+  loaded = true;
   const rows = db.prepare("SELECT text, vec FROM embeddings WHERE model = ?").all(MODEL) as { text: string; vec: Buffer }[];
-  for (const r of rows) mem.set(r.text, new Float32Array(r.vec.buffer, r.vec.byteOffset, r.vec.byteLength / 4));
-  return mem;
+  for (const r of rows) setVec(r.text, new Float32Array(r.vec.buffer, r.vec.byteOffset, r.vec.byteLength / 4));
 }
 
-const norm = (s: string) => s.trim().toLowerCase();
-
-/** Store a vector, unit-normalized so similarity is a plain dot product. */
+/** Persist + store a vector, unit-normalized so similarity is a plain dot product. */
 function put(text: string, raw: number[]) {
   let len = 0;
   for (const x of raw) len += x * x;
   len = Math.sqrt(len) || 1;
   const v = Float32Array.from(raw, (x) => x / len);
-  db.prepare("INSERT OR REPLACE INTO embeddings (text, model, vec) VALUES (?, ?, ?)")
-    .run(text, MODEL, Buffer.from(v.buffer));
-  load().set(text, v);
+  db.prepare("INSERT OR REPLACE INTO embeddings (text, model, vec) VALUES (?, ?, ?)").run(text, MODEL, Buffer.from(v.buffer));
+  setVec(text, v);
 }
 
 async function embed(texts: string[]): Promise<number[][]> {
@@ -55,8 +53,8 @@ async function embed(texts: string[]): Promise<number[][]> {
 /** Embed any of `texts` not already cached. Safe to call with duplicates/empties. No-op without a key. */
 export async function warmEmbeddings(texts: string[]): Promise<void> {
   if (!KEY) return;
-  const cache = load();
-  const missing = [...new Set(texts.map(norm).filter((t) => t && !cache.has(t)))];
+  loadOnce();
+  const missing = [...new Set(texts.map(normText).filter((t) => t && !getVec(t)))];
   if (!missing.length) return;
   // Voyage accepts up to 128 inputs per request.
   for (let i = 0; i < missing.length; i += 128) {
@@ -71,28 +69,13 @@ export async function warmEmbeddings(texts: string[]): Promise<void> {
   }
 }
 
-const vecOf = (text: string) => (KEY ? load().get(norm(text)) ?? null : null);
-
-function dot(a: Float32Array, b: Float32Array): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
-
-/** Cosine similarity of two cached strings in [-1,1], or null if either is not cached. */
-export function similarity(a: string, b: string): number | null {
-  const va = vecOf(a), vb = vecOf(b);
-  return va && vb ? dot(va, vb) : null;
-}
-
-/** Best cosine of `target` against any of `candidates`; null if nothing is cached to compare. */
-export function bestSimilarity(candidates: string[], target: string): number | null {
-  const vt = vecOf(target);
-  if (!vt) return null;
-  let best: number | null = null;
-  for (const c of candidates) {
-    const vc = vecOf(c);
-    if (vc) { const s = dot(vc, vt); if (best === null || s > best) best = s; }
-  }
-  return best;
+/**
+ * Embed every string the scorer might compare for this profile + these listings, once, before scoring.
+ * calculateMatchScore stays synchronous and reads the warmed store; without a key this is a no-op.
+ */
+export async function warmForScoring(p: Profile, opps: NormalizedOpportunity[]): Promise<void> {
+  await warmEmbeddings([
+    ...p.skills, ...p.roles, profileSummaryText(p),
+    ...opps.flatMap((o) => [...o.skills, ...o.nice_to_have, o.title, o.description]),
+  ]);
 }

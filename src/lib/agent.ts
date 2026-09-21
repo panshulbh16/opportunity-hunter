@@ -8,8 +8,9 @@ import type { SearchQuery, SourceAdapter } from "./sources/types";
 import { MAX_QUERIES_PER_RUN } from "./sources/jsearch";
 import {
   calculateMatchScore, deduplicateOpportunities, generateDailyDigest, generateMatchExplanation, generateSearchQueries,
-  normalizeOpportunity, warmForScoring, type NormalizedOpportunity, type Opportunity,
+  normalizeOpportunity, type NormalizedOpportunity, type Opportunity,
 } from "./ai";
+import { warmForScoring } from "./ai/embeddings";
 import { getProfile, parseOpp } from "./queries";
 
 const MIN_RELEVANT_SCORE = 40;

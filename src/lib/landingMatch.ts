@@ -1,6 +1,7 @@
 import {
-  calculateMatchScore, formatSalary, generateMatchExplanation, normalizeOpportunity, warmForScoring, type Profile,
+  calculateMatchScore, formatSalary, generateMatchExplanation, normalizeOpportunity, type Profile,
 } from "./ai/index.ts";
+import { warmForScoring } from "./ai/embeddings.ts";
 import type { ResumeProfile } from "./ai/resume.ts";
 import type { RawOpportunity } from "./sources/types.ts";
 

@@ -3,7 +3,8 @@
 // (e.g. generateMatchExplanation → prompt an LLM with the breakdown) without touching callers.
 
 import type { RawOpportunity, SearchQuery } from "../sources/types";
-import { bestSimilarity, similarity, warmEmbeddings } from "./embeddings.ts";
+// Sync cosine reads only — client-safe, no DB. The server fills the store (embeddings.ts) before scoring.
+import { bestSimilarity, similarity } from "./embeddings-store.ts";
 
 // A required skill counts as covered above this cosine even without an exact string match
 // (e.g. "React" ↔ "Next.js"); the title earns a semantic role floor above ROLE_SIM.
@@ -12,17 +13,6 @@ const ROLE_SIM = 0.5;
 
 /** One string that stands in for the whole profile when comparing against a listing's description. */
 export const profileSummaryText = (p: Profile) => [p.roles.join(", "), p.current_role, p.skills.join(", ")].filter(Boolean).join(". ");
-
-/**
- * Embed every string the scorer might compare for this profile + these listings, once, before scoring.
- * calculateMatchScore stays synchronous and reads the warmed cache; without a key this is a no-op.
- */
-export async function warmForScoring(p: Profile, opps: NormalizedOpportunity[]): Promise<void> {
-  await warmEmbeddings([
-    ...p.skills, ...p.roles, profileSummaryText(p),
-    ...opps.flatMap((o) => [...o.skills, ...o.nice_to_have, o.title, o.description]),
-  ]);
-}
 
 // ---------- Types ----------
 

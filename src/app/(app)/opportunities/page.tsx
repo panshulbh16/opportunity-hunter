@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { getProfile, listOpportunities, listSaved, type Filters } from "@/lib/queries";
-import { calculateMatchScore, warmForScoring } from "@/lib/ai";
+import { calculateMatchScore } from "@/lib/ai";
+import { warmForScoring } from "@/lib/ai/embeddings";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { PoolHealthBanner } from "@/components/PoolHealthBanner";
