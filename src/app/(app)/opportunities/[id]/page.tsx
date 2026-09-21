@@ -4,7 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { db, now } from "@/lib/db";
 import { getMatch, type MatchRow } from "@/lib/queries";
 import { evaluateForUser } from "@/lib/agent";
-import { calculateMatchScore, formatSalary, generateApplicationDraft, recommendNextAction, type ApplicationDraft } from "@/lib/ai";
+import { calculateMatchScore, formatSalary, generateApplicationDraft, recommendNextAction, warmForScoring, type ApplicationDraft } from "@/lib/ai";
 import { getProfile } from "@/lib/queries";
 import { ApplicationDraftPanel } from "@/components/ApplicationDraft";
 import { PLANS } from "@/lib/plans";
@@ -25,7 +25,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
   let item = getMatch(user.id, id);
   if (!item) notFound();
   if (!item.match && user.subscription_plan === "pro") {
-    evaluateForUser(user.id, item.opp);
+    await evaluateForUser(user.id, item.opp);
     item = getMatch(user.id, id)!;
   }
   const { match: m, opp: o } = item;
@@ -38,7 +38,10 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
   // Only draftable once the listing has been scored for this user — the draft leans on the match breakdown.
   let draft: ApplicationDraft | null = null;
   const profile = m ? getProfile(user.id) : null;
-  if (m && profile) draft = generateApplicationDraft(user.name, profile, o, calculateMatchScore(profile, o), m.explanation);
+  if (m && profile) {
+    await warmForScoring(profile, [o]);
+    draft = generateApplicationDraft(user.name, profile, o, calculateMatchScore(profile, o), m.explanation);
+  }
 
   return (
     <div className="mx-auto max-w-4xl">

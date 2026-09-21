@@ -10,6 +10,7 @@ import { looksLikePdf } from "./resume.ts";
 import { classifyLinkStatus } from "../linkcheck.ts";
 import { onboardingWelcome } from "../welcome.ts";
 import { profileFromResume, SAMPLE_RESUME, sampleLandingMatch, scoreAgainstProfile } from "../landingMatch.ts";
+import { bestSimilarity, embeddingsEnabled, similarity, warmEmbeddings } from "./embeddings.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -150,12 +151,12 @@ assert.ok(!/scored every opportunity/i.test(emptyFeed.body), "empty feed must no
 assert.match(onboardingWelcome("ok", 0, "daily").body, /cleared your match bar/);
 assert.match(onboardingWelcome("ok", 3, "twice_daily").body, /twice a day/);
 
-const landing = sampleLandingMatch();
-const landingAgain = scoreAgainstProfile(profileFromResume(SAMPLE_RESUME), "sample");
+const landing = await sampleLandingMatch();
+const landingAgain = await scoreAgainstProfile(profileFromResume(SAMPLE_RESUME), "sample");
 assert.equal(landing.score, landingAgain.score, "landing % is the engine, not a hardcoded 92");
 assert.ok(landing.strengths.some((s) => /Python|TypeScript|Backend/i.test(s)), "strengths name resume skills or title");
 assert.match(landing.caption, /resume/i);
-const doctorLanding = scoreAgainstProfile(profileFromResume({
+const doctorLanding = await scoreAgainstProfile(profileFromResume({
   ...SAMPLE_RESUME,
   roles: ["Physician"], skills: ["Patient Care", "MBBS", "ACLS", "BLS", "Clinical Practice"],
   current_role: "Physician at City Hospital", education: "MBBS", locations: ["Mumbai, India"],
@@ -163,5 +164,17 @@ const doctorLanding = scoreAgainstProfile(profileFromResume({
 assert.match(doctorLanding.title, /Physician/i);
 assert.ok(!/Software Engineer/i.test(doctorLanding.title), "clinical resume must not preview a software listing");
 assert.ok(doctorLanding.score >= 70);
+
+// Semantic layer. Offline (no key) the helpers must be inert so scoring falls back to exact match;
+// with a key we assert the point of the feature: a related skill scores above an unrelated one.
+if (!embeddingsEnabled) {
+  assert.equal(similarity("React", "Next.js"), null, "no key ⇒ similarity is null and scoring stays exact-match");
+} else {
+  await warmEmbeddings(["React", "Next.js", "Registered Nurse"]);
+  const near = bestSimilarity(["Next.js"], "React")!;
+  const far = bestSimilarity(["Registered Nurse"], "React")!;
+  assert.ok(near > far, `React↔Next.js (${near.toFixed(2)}) must beat React↔Nurse (${far.toFixed(2)})`);
+  assert.ok(near >= 0.72, "related skills clear the SKILL_SIM threshold");
+}
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);

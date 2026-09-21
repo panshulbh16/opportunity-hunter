@@ -1,5 +1,5 @@
 import {
-  calculateMatchScore, formatSalary, generateMatchExplanation, normalizeOpportunity, type Profile,
+  calculateMatchScore, formatSalary, generateMatchExplanation, normalizeOpportunity, warmForScoring, type Profile,
 } from "./ai/index.ts";
 import type { ResumeProfile } from "./ai/resume.ts";
 import type { RawOpportunity } from "./sources/types.ts";
@@ -74,8 +74,9 @@ export function matchCaption(p: Profile, kind: "sample" | "resume" | "profile") 
   return `Scored from this resume: ${who}. Upload yours to replace the sample.`;
 }
 
-export function scoreAgainstProfile(profile: Profile, kind: "sample" | "resume" | "profile", cta?: { href: string; label: string }): LandingMatchView {
+export async function scoreAgainstProfile(profile: Profile, kind: "sample" | "resume" | "profile", cta?: { href: string; label: string }): Promise<LandingMatchView> {
   const job = jobFor(profile);
+  await warmForScoring(profile, [job]);
   const b = calculateMatchScore(profile, job);
   const e = generateMatchExplanation(profile, job, b);
   return {
@@ -93,6 +94,6 @@ export function scoreAgainstProfile(profile: Profile, kind: "sample" | "resume" 
   };
 }
 
-export function sampleLandingMatch() {
+export function sampleLandingMatch(): Promise<LandingMatchView> {
   return scoreAgainstProfile(profileFromResume(SAMPLE_RESUME), "sample");
 }

@@ -40,9 +40,9 @@ export default async function Landing() {
       ctaHref: `/opportunities/${o.id}`, ctaLabel: "View Opportunity",
     };
   } else if (profile) {
-    initial = scoreAgainstProfile(profile, "profile", { href: "/dashboard", label: "Open dashboard" });
+    initial = await scoreAgainstProfile(profile, "profile", { href: "/dashboard", label: "Open dashboard" });
   } else {
-    initial = sampleLandingMatch();
+    initial = await sampleLandingMatch();
   }
   return (
     <div className="min-h-screen bg-white">

@@ -166,6 +166,13 @@ CREATE TABLE IF NOT EXISTS source_runs (
   status TEXT NOT NULL DEFAULT 'running',
   error TEXT
 );
+CREATE TABLE IF NOT EXISTS embeddings (
+  text TEXT NOT NULL,
+  model TEXT NOT NULL,
+  vec BLOB NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (text, model)
+);
 `;
 
 const g = globalThis as unknown as { __db?: Database.Database; __closeHooked?: boolean };

@@ -3,6 +3,26 @@
 // (e.g. generateMatchExplanation → prompt an LLM with the breakdown) without touching callers.
 
 import type { RawOpportunity, SearchQuery } from "../sources/types";
+import { bestSimilarity, similarity, warmEmbeddings } from "./embeddings.ts";
+
+// A required skill counts as covered above this cosine even without an exact string match
+// (e.g. "React" ↔ "Next.js"); the title earns a semantic role floor above ROLE_SIM.
+const SKILL_SIM = 0.72;
+const ROLE_SIM = 0.5;
+
+/** One string that stands in for the whole profile when comparing against a listing's description. */
+export const profileSummaryText = (p: Profile) => [p.roles.join(", "), p.current_role, p.skills.join(", ")].filter(Boolean).join(". ");
+
+/**
+ * Embed every string the scorer might compare for this profile + these listings, once, before scoring.
+ * calculateMatchScore stays synchronous and reads the warmed cache; without a key this is a no-op.
+ */
+export async function warmForScoring(p: Profile, opps: NormalizedOpportunity[]): Promise<void> {
+  await warmEmbeddings([
+    ...p.skills, ...p.roles, profileSummaryText(p),
+    ...opps.flatMap((o) => [...o.skills, ...o.nice_to_have, o.title, o.description]),
+  ]);
+}
 
 // ---------- Types ----------
 
@@ -431,9 +451,12 @@ export function calculateMatchScore(p: Profile, o: NormalizedOpportunity): Break
   const userSkills = new Set(p.skills.map(normSkill));
   const req = o.skills.map((s) => [s, normSkill(s)] as const);
   const nice = o.nice_to_have.map((s) => [s, normSkill(s)] as const);
-  const matchedSkills = req.filter(([, n]) => userSkills.has(n)).map(([s]) => s);
-  const missingSkills = req.filter(([, n]) => !userSkills.has(n)).map(([s]) => s);
-  const missingNice = nice.filter(([, n]) => !userSkills.has(n)).map(([s]) => s);
+  // Covered if the exact normalized skill is present, or a profile skill is semantically close
+  // enough. bestSimilarity returns null without embeddings, collapsing to the exact-match path.
+  const covered = ([orig, n]: readonly [string, string]) => userSkills.has(n) || (bestSimilarity(p.skills, orig) ?? -1) >= SKILL_SIM;
+  const matchedSkills = req.filter(covered).map(([s]) => s);
+  const missingSkills = req.filter((x) => !covered(x)).map(([s]) => s);
+  const missingNice = nice.filter((x) => !covered(x)).map(([s]) => s);
   const coverage = req.length ? matchedSkills.length / req.length : 0.6;
   const niceHits = nice.length - missingNice.length;
   const relevance = userSkills.size ? Math.min(1, (matchedSkills.length + niceHits) / Math.min(userSkills.size, 6)) : coverage;
@@ -457,6 +480,11 @@ export function calculateMatchScore(p: Profile, o: NormalizedOpportunity): Break
     if (s > role_score) { role_score = s; matchedRole = r; }
   }
   if (p.keywords.some((k) => k && o.title.toLowerCase().includes(k.toLowerCase()))) role_score = Math.max(role_score, 60);
+  // Semantic floor: a title close to any profile role lifts the score even with no shared tokens.
+  // Skipped when the families genuinely differ, so it never revives a cross-domain match.
+  const roleSim = bestSimilarity(p.roles, o.title);
+  if (roleSim != null && roleSim >= ROLE_SIM && (titleFam === "other" || p.roles.some((r) => roleFamily(r) === titleFam)))
+    role_score = Math.max(role_score, 50 + 100 * (roleSim - ROLE_SIM));
   role_score = clamp(role_score);
 
   // Experience & seniority
@@ -501,6 +529,10 @@ export function calculateMatchScore(p: Profile, o: NormalizedOpportunity): Break
   if (p.preferences.includes("visa_sponsorship") && !locHit && !global && o.remote_type !== "remote" && !o.visa_sponsorship) adj -= 15;
   if (p.companies.some((c) => c && o.company.toLowerCase() === c.toLowerCase())) adj += 5;
   if (p.industries.some((i) => i && o.industry.toLowerCase().includes(i.toLowerCase()))) adj += 3;
+  // Whole-profile vs whole-listing semantic nudge: refines ranking between otherwise-similar scores,
+  // deliberately small (−3..+5) so it never overrides the structured components. Null without embeddings.
+  const docSim = similarity(profileSummaryText(p), o.description);
+  if (docSim != null) adj += Math.max(-3, Math.min(5, Math.round((docSim - 0.4) * 20)));
 
   let score = 0.3 * skills_score + 0.25 * role_score + 0.15 * experience_score + 0.15 * location_score + 0.15 * salary_score + adj;
   if (typeMismatch) score *= 0.6;

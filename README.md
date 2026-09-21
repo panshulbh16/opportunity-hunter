@@ -35,6 +35,29 @@ Next.js 15 (App Router, server actions) · SQLite via `better-sqlite3` (file at 
 - **Email**: `RESEND_API_KEY`. Otherwise digests and reset links print to the server console.
 - **Payments**: `RAZORPAY_KEY_ID` + `RAZORPAY_KEY_SECRET` turn on checkout. Pro is a 30-day pass (₹499, no auto-renew; buying again stacks), expired every 15 min in `boot.ts`. Add a Razorpay webhook to `/api/razorpay/webhook` for event `order.paid` with secret `RAZORPAY_WEBHOOK_SECRET`, so buyers who close the tab mid-payment still get Pro. Logic in `src/lib/razorpay.ts`; admins can still set plans manually at `/admin`.
 - **Live job listings**: `RAPIDAPI_KEY` enables the JSearch adapter (`src/lib/sources/jsearch.ts`) — a licensed aggregator that includes LinkedIn, Indeed and Glassdoor postings. LinkedIn has no third-party search API and forbids scraping, so this is the legitimate route. Add further adapters in `src/lib/sources/index.ts`.
+- **Semantic matching**: `VOYAGE_API_KEY` upgrades the matcher from exact text to meaning (see below).
+
+## How matching works
+
+`calculateMatchScore` (`src/lib/ai/index.ts`) is a deterministic, explainable scorer: skills, role,
+experience, location and salary each produce a 0–100 sub-score, combined by fixed weights into one
+number with a plain-English breakdown. It is **synchronous** and runs in a hot loop over every
+candidate, so it never makes a network call.
+
+By default skills and roles are matched by normalized text, which misses obvious equivalences —
+"React" vs "Next.js", "Postgres" vs "PostgreSQL". Setting `VOYAGE_API_KEY` adds a **semantic layer**
+(`src/lib/ai/embeddings.ts`):
+
+- Every skill, role and listing description is embedded **once** via Voyage and cached in SQLite
+  (`embeddings` table), keyed by text. Vectors are unit-normalized, so similarity is a dot product.
+- `warmForScoring(profile, opps)` embeds any new strings up front (async, batched); callers await it
+  before scoring. The scorer then reads warmed vectors **synchronously** — it stays a pure function.
+- A required skill counts as covered if an exact match *or* a profile skill within `SKILL_SIM` cosine;
+  a title earns a semantic role floor above `ROLE_SIM`; and whole-profile-vs-listing similarity is a
+  small ±nudge on the final score. Cross-domain guards still apply (a doctor never matches a dev role).
+- **No key → the semantic helpers return `null` and the matcher falls back to exact text**, so the
+  app and its self-tests run fully offline. `npm run check` exercises the fallback; with a key set it
+  also asserts related skills out-score unrelated ones.
 
 ## Deploying
 
