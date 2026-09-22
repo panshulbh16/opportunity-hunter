@@ -80,6 +80,28 @@ export async function warmForScoring(p: Profile, opps: NormalizedOpportunity[]):
   ]);
 }
 
+// Two same-company titles this close are the same role posted twice (reworded across boards),
+// so we drop the later one. Deliberately high: a missed duplicate is minor, but merging two
+// genuinely different roles hides a real job — favor precision, raise it further if false merges appear.
+const DUP_SIM = 0.93;
+
+/**
+ * Second de-dupe pass after the exact key match: collapse near-identical titles *within the same
+ * company* by embedding similarity, keeping the earliest posting. Reused embeddings; no-op without a key.
+ */
+export async function semanticDedupe<T extends { company: string; title: string; posted_date: string }>(list: T[]): Promise<T[]> {
+  if (!KEY || list.length < 2) return list;
+  await warmEmbeddings(list.map((o) => o.title));
+  const sorted = [...list].sort((a, b) => a.posted_date.localeCompare(b.posted_date));
+  const kept: T[] = [];
+  for (const o of sorted) {
+    const co = normText(o.company);
+    const dup = kept.some((k) => normText(k.company) === co && (similarity(k.title, o.title) ?? 0) >= DUP_SIM);
+    if (!dup) kept.push(o);
+  }
+  return kept;
+}
+
 // A listing is "about" the query above this cosine. Descriptions are long and queries short, so a
 // meaning match sits lower than a skill-to-skill one — 0.34 keeps the on-topic ones and drops the rest.
 const SEARCH_SIM = 0.34;
