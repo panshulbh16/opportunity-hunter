@@ -51,12 +51,32 @@ const PRINT_CSS = `
   a { color: inherit; text-decoration: none; }
 `;
 
-/** Open a print window with the résumé rendered for PDF export, and trigger print. */
+/**
+ * Render the résumé into a hidden iframe and open the browser's print / Save-as-PDF dialog.
+ * An iframe (not window.open) avoids pop-up blockers, and we call print() directly rather than
+ * relying on the child's load event — which for a written-in document has usually already fired.
+ */
 export function resumePdfToPrintWindow(md: string) {
   const html = resumeMarkdownToHtml(md);
-  const w = window.open("", "_blank", "width=900,height=1100");
-  if (!w) { alert("Please allow pop-ups to download the PDF, then try again."); return; }
-  w.document.open();
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Résumé</title><style>${PRINT_CSS}</style></head><body>${html}<script>window.onload=function(){setTimeout(function(){window.print();},150);};</script></body></html>`);
-  w.document.close();
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  Object.assign(iframe.style, { position: "fixed", right: "0", bottom: "0", width: "0", height: "0", border: "0", opacity: "0" });
+  document.body.appendChild(iframe);
+  const win = iframe.contentWindow;
+  const doc = win?.document;
+  if (!win || !doc) { iframe.remove(); return; }
+
+  doc.open();
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>Résumé</title><style>${PRINT_CSS}</style></head><body>${html}</body></html>`);
+  doc.close();
+
+  let cleaned = false;
+  const cleanup = () => { if (!cleaned) { cleaned = true; setTimeout(() => iframe.remove(), 500); } };
+  win.onafterprint = cleanup;
+  // Give the iframe a moment to lay out (fonts, wrapping) before printing.
+  setTimeout(() => {
+    try { win.focus(); win.print(); } catch { /* ignore */ }
+    // Fallback removal if onafterprint never fires (some browsers).
+    setTimeout(cleanup, 60000);
+  }, 250);
 }
