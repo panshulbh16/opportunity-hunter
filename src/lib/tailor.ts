@@ -45,12 +45,25 @@ function client() {
   return new Anthropic(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {});
 }
 
+/** The résumé is either pasted text or an uploaded PDF (Claude reads the PDF natively — no pre-extraction). */
+export type ResumeInput = { text: string } | { pdfBase64: string };
+
 /** A streaming Claude call; iterate its events for text deltas. */
-export function createTailorStream(resume: string, jd: string) {
+export function createTailorStream(resume: ResumeInput, jd: string) {
+  const resumeBlocks: Anthropic.ContentBlockParam[] = "pdfBase64" in resume
+    ? [
+        { type: "text", text: "=== RÉSUMÉ (attached PDF) ===" },
+        { type: "document", source: { type: "base64", media_type: "application/pdf", data: resume.pdfBase64 } },
+      ]
+    : [{ type: "text", text: `=== RÉSUMÉ ===\n${resume.text}` }];
   return client().messages.stream({
     model: "claude-sonnet-5",
     max_tokens: 8000,
-    messages: [{ role: "user", content: `${INSTRUCTIONS}\n\n=== RÉSUMÉ ===\n${resume}\n\n=== JOB DESCRIPTION ===\n${jd}` }],
+    messages: [{ role: "user", content: [
+      { type: "text", text: INSTRUCTIONS },
+      ...resumeBlocks,
+      { type: "text", text: `=== JOB DESCRIPTION ===\n${jd}` },
+    ] }],
   });
 }
 
