@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { getProfile, listOpportunities, listSaved, type Filters } from "@/lib/queries";
 import { calculateMatchScore } from "@/lib/ai";
-import { warmForScoring } from "@/lib/ai/embeddings";
+import { embeddingsEnabled, semanticRank, warmForScoring } from "@/lib/ai/embeddings";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { PoolHealthBanner } from "@/components/PoolHealthBanner";
@@ -14,12 +14,19 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
   const user = await requireUser();
   const sp = await searchParams;
   const num = (k: string) => (sp[k] && Number.isFinite(parseFloat(sp[k]!)) ? parseFloat(sp[k]!) : undefined);
+  const sem = sp.sem?.slice(0, 120).trim();
+  // Semantic search ranks the broad pool by meaning. Without an embeddings key it falls back to a
+  // plain keyword filter so the box still works; saved lists keep their own order.
+  const useSemantic = !!sem && embeddingsEnabled && sp.status !== "saved";
   const f: Filters = {
-    q: sp.q?.slice(0, 100), minScore: num("minScore"), location: sp.location?.slice(0, 60), remote: sp.remote, minSalary: num("minSalary"),
+    q: useSemantic ? undefined : (sp.q?.slice(0, 100) ?? (sem || undefined)),
+    minScore: num("minScore"), location: sp.location?.slice(0, 60), remote: sp.remote, minSalary: num("minSalary"),
     maxYears: num("maxYears"), type: sp.type, postedDays: num("postedDays"), company: sp.company?.slice(0, 60), skill: sp.skill?.slice(0, 40),
     sort: sp.sort, status: sp.status === "rejected" ? "rejected" : undefined,
+    limit: useSemantic ? 200 : undefined,
   };
-  const items = sp.status === "saved" ? listSaved(user.id) : listOpportunities(user.id, f);
+  let items = sp.status === "saved" ? listSaved(user.id) : listOpportunities(user.id, f);
+  if (useSemantic) items = await semanticRank(sem!, items);
   const profile = getProfile(user.id);
   // Pro: score unscored listings on the fly for display; persisted only when the listing is opened.
   if (user.subscription_plan === "pro" && profile) {
@@ -39,8 +46,15 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
 
       <form className="card mb-6 p-4" method="get">
         {sp.status && <input type="hidden" name="status" value={sp.status} />}
+        <div className="mb-3">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input name="sem" defaultValue={sp.sem} placeholder="Describe your ideal role in plain English — e.g. “remote python backend with good pay”" className="input sm:flex-1" />
+            <button type="submit" className="btn-primary">Search</button>
+          </div>
+          <p className="mt-1.5 text-xs text-zinc-400">✨ Semantic search ranks by meaning, not just keywords{embeddingsEnabled ? "" : " — keyword mode until AI search is enabled"}.</p>
+        </div>
         <div className="flex flex-col gap-3 md:flex-row">
-          <input name="q" defaultValue={sp.q} placeholder="Search title, company, skills…" className="input md:flex-1" />
+          <input name="q" defaultValue={sp.q} placeholder="Or filter by exact title, company, skills…" className="input md:flex-1" />
           <select name="sort" defaultValue={sp.sort ?? "best"} className="input md:w-44">
             <option value="best">Best Match</option><option value="newest">Newest</option><option value="salary">Salary</option><option value="relevance">Relevance</option>
           </select>

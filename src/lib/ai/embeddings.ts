@@ -1,5 +1,5 @@
 import { db } from "../db.ts";
-import { getVec, normText, setVec } from "./embeddings-store.ts";
+import { bestSimilarity, getVec, normText, setVec, similarity } from "./embeddings-store.ts";
 import { profileSummaryText, type NormalizedOpportunity, type Profile } from "./index.ts";
 
 // Server-only half of the semantic layer: the persistent SQLite cache and the Voyage calls that fill
@@ -14,7 +14,7 @@ const KEY = process.env.VOYAGE_API_KEY;
 const ENDPOINT = "https://api.voyageai.com/v1/embeddings";
 
 export const embeddingsEnabled = !!KEY;
-export { similarity, bestSimilarity } from "./embeddings-store.ts";
+export { similarity, bestSimilarity };
 
 // Persisted vectors are loaded into the store once per process. ponytail: the whole cache lives in
 // memory (a few MB for this app's skill/role/description vocabulary); add an ANN index only past ~1e5 rows.
@@ -78,4 +78,26 @@ export async function warmForScoring(p: Profile, opps: NormalizedOpportunity[]):
     ...p.skills, ...p.roles, profileSummaryText(p),
     ...opps.flatMap((o) => [...o.skills, ...o.nice_to_have, o.title, o.description]),
   ]);
+}
+
+// A listing is "about" the query above this cosine. Descriptions are long and queries short, so a
+// meaning match sits lower than a skill-to-skill one — 0.34 keeps the on-topic ones and drops the rest.
+const SEARCH_SIM = 0.34;
+const docText = (o: { title: string; description: string }) => `${o.title}. ${o.description}`;
+
+/**
+ * Rank listings by how well their meaning matches a free-text query (semantic search), best first,
+ * dropping the clearly-unrelated. Returns the input order unchanged when embeddings aren't available,
+ * so the caller can fall back to keyword filtering — it never hides everything on a cold cache.
+ */
+export async function semanticRank<T extends { opp: { title: string; description: string } }>(
+  query: string, items: T[], limit = 60,
+): Promise<T[]> {
+  if (!KEY || !items.length) return items;
+  await warmEmbeddings([query, ...items.map((i) => docText(i.opp))]);
+  const scored = items
+    .map((i) => ({ i, s: similarity(query, docText(i.opp)) }))
+    .filter((x): x is { i: T; s: number } => x.s != null);
+  if (!scored.length) return items; // query or docs didn't embed — leave the list as-is
+  return scored.filter((x) => x.s >= SEARCH_SIM).sort((a, b) => b.s - a.s).slice(0, limit).map((x) => x.i);
 }
