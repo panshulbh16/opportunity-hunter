@@ -10,7 +10,7 @@ import {
   calculateMatchScore, deduplicateOpportunities, generateDailyDigest, generateMatchExplanation, generateSearchQueries,
   normalizeOpportunity, type NormalizedOpportunity, type Opportunity,
 } from "./ai";
-import { semanticDedupe, warmForScoring } from "./ai/embeddings";
+import { semanticDedupe, warmForScoring, warmListings } from "./ai/embeddings";
 import { getProfile, parseOpp } from "./queries";
 
 const MIN_RELEVANT_SCORE = 40;
@@ -69,6 +69,12 @@ async function collect(queries: SearchQuery[]) {
       fresh += r.changes;
     }
   })();
+  // Precompute search embeddings for the active pool so semantic search always hits a warm cache.
+  // Runs each hunt, so it also backfills listings ingested before this existed. warmEmbeddings skips
+  // anything already cached, so it's cheap after the first pass.
+  const pool = db.prepare("SELECT title, description FROM opportunities WHERE is_demo = 0 AND posted_date >= date('now', ?) LIMIT 500")
+    .all(`-${MAX_LISTING_AGE_DAYS} days`) as { title: string; description: string }[];
+  await warmListings(pool);
   return { retrieved: all.length, fresh };
 }
 
