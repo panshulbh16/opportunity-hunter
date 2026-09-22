@@ -111,6 +111,14 @@ const SEARCH_SIM = 0.34;
 const docText = (o: { title: string; description: string }) => `${o.title}. ${o.description.slice(0, 400)}`;
 
 /**
+ * Precompute the search vectors for a set of listings, once, so semantic search hits a warm cache
+ * instead of embedding the whole pool during a page render. Called at ingest; no-op without a key.
+ */
+export async function warmListings(opps: { title: string; description: string }[]): Promise<void> {
+  await warmEmbeddings(opps.map(docText));
+}
+
+/**
  * Rank listings by how well their meaning matches a free-text query (semantic search), best first,
  * dropping the clearly-unrelated. Returns the input order unchanged when embeddings aren't available,
  * so the caller can fall back to keyword filtering — it never hides everything on a cold cache.
