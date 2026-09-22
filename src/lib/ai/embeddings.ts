@@ -56,15 +56,17 @@ export async function warmEmbeddings(texts: string[]): Promise<void> {
   loadOnce();
   const missing = [...new Set(texts.map(normText).filter((t) => t && !getVec(t)))];
   if (!missing.length) return;
-  // Voyage accepts up to 128 inputs per request.
-  for (let i = 0; i < missing.length; i += 128) {
-    const batch = missing.slice(i, i + 128);
+  // Smaller batches keep each request well under the timeout even when embedding many long
+  // descriptions, and a failed batch skips ahead instead of aborting the rest — so a cold cache
+  // fills incrementally rather than returning nothing.
+  for (let i = 0; i < missing.length; i += 48) {
+    const batch = missing.slice(i, i + 48);
     try {
       const vecs = await embed(batch);
       batch.forEach((t, j) => put(t, vecs[j]));
     } catch {
-      // A failed batch just leaves those strings uncached; the scorer falls back to exact match for them.
-      return;
+      // A failed batch just leaves those strings uncached; callers fall back to exact match for them.
+      continue;
     }
   }
 }
@@ -105,7 +107,8 @@ export async function semanticDedupe<T extends { company: string; title: string;
 // A listing is "about" the query above this cosine. Descriptions are long and queries short, so a
 // meaning match sits lower than a skill-to-skill one — 0.34 keeps the on-topic ones and drops the rest.
 const SEARCH_SIM = 0.34;
-const docText = (o: { title: string; description: string }) => `${o.title}. ${o.description}`;
+// Title + the head of the description: enough signal to rank relevance, small enough to embed fast.
+const docText = (o: { title: string; description: string }) => `${o.title}. ${o.description.slice(0, 400)}`;
 
 /**
  * Rank listings by how well their meaning matches a free-text query (semantic search), best first,

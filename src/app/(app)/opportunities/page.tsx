@@ -23,7 +23,7 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
     minScore: num("minScore"), location: sp.location?.slice(0, 60), remote: sp.remote, minSalary: num("minSalary"),
     maxYears: num("maxYears"), type: sp.type, postedDays: num("postedDays"), company: sp.company?.slice(0, 60), skill: sp.skill?.slice(0, 40),
     sort: sp.sort, status: sp.status === "rejected" ? "rejected" : undefined,
-    limit: useSemantic ? 200 : undefined,
+    limit: useSemantic ? 120 : undefined,
   };
   let items = sp.status === "saved" ? listSaved(user.id) : listOpportunities(user.id, f);
   if (useSemantic) items = await semanticRank(sem!, items);
