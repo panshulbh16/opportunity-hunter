@@ -4,7 +4,7 @@ import { unreadCount } from "@/lib/queries";
 import { logout } from "@/app/actions";
 import { Logo } from "@/components/ui";
 
-const NAV = [["/dashboard", "Dashboard"], ["/opportunities", "Opportunities"], ["/applications", "Applications"], ["/alerts", "Alerts"], ["/profile", "Search Profile"], ["/settings", "Settings"]];
+const NAV = [["/dashboard", "Dashboard"], ["/opportunities", "Opportunities"], ["/tailor", "Tailor Résumé"], ["/applications", "Applications"], ["/alerts", "Alerts"], ["/profile", "Search Profile"], ["/settings", "Settings"]];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
