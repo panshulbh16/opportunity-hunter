@@ -10,7 +10,7 @@ import { looksLikePdf } from "./resume.ts";
 import { classifyLinkStatus } from "../linkcheck.ts";
 import { onboardingWelcome } from "../welcome.ts";
 import { profileFromResume, SAMPLE_RESUME, sampleLandingMatch, scoreAgainstProfile } from "../landingMatch.ts";
-import { bestSimilarity, embeddingsEnabled, semanticRank, similarity, warmEmbeddings } from "./embeddings.ts";
+import { bestSimilarity, embeddingsEnabled, semanticDedupe, semanticRank, similarity, warmEmbeddings } from "./embeddings.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -188,6 +188,20 @@ if (!embeddingsEnabled) {
 } else {
   const ranked = await semanticRank("remote python backend developer", searchJobs);
   assert.equal(ranked[0]?.opp.title, "Senior Python Backend Engineer", "semantic search ranks the on-topic job first");
+}
+
+// Semantic de-dupe: a reworded repost at the same company collapses; a different role stays.
+const dupJobs = [
+  { company: "Acme Corp", title: "Senior Backend Engineer", posted_date: "2026-09-01" },
+  { company: "Acme Corp", title: "Sr. Backend Engineer", posted_date: "2026-09-03" },
+  { company: "Acme Corp", title: "Frontend Engineer", posted_date: "2026-09-02" },
+];
+if (!embeddingsEnabled) {
+  assert.equal((await semanticDedupe(dupJobs)).length, dupJobs.length, "no key ⇒ semanticDedupe leaves the list unchanged");
+} else {
+  const deduped = await semanticDedupe(dupJobs);
+  assert.ok(deduped.some((j) => j.title === "Frontend Engineer"), "a different role at the same company is kept");
+  assert.ok(deduped.filter((j) => /backend/i.test(j.title)).length === 1, "the reworded backend repost collapses to one");
 }
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);

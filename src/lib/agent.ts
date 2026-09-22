@@ -10,7 +10,7 @@ import {
   calculateMatchScore, deduplicateOpportunities, generateDailyDigest, generateMatchExplanation, generateSearchQueries,
   normalizeOpportunity, type NormalizedOpportunity, type Opportunity,
 } from "./ai";
-import { warmForScoring } from "./ai/embeddings";
+import { semanticDedupe, warmForScoring } from "./ai/embeddings";
 import { getProfile, parseOpp } from "./queries";
 
 const MIN_RELEVANT_SCORE = 40;
@@ -55,7 +55,7 @@ async function collect(queries: SearchQuery[]) {
       db.prepare("UPDATE source_runs SET finished_at = ?, status = 'error', error = ? WHERE id = ?").run(now(), String(e), run);
     }
   }
-  const unique = deduplicateOpportunities(all);
+  const unique = await semanticDedupe(deduplicateOpportunities(all));
   const insert = db.prepare(`INSERT OR IGNORE INTO opportunities (category, title, company, location, country, remote_type, salary_min,
       salary_max, currency, salary_period, description, skills, nice_to_have, min_years, seniority, employment_type, company_type,
       industry, visa_sponsorship, source, source_url, application_url, posted_date, canonical_url, dedupe_key, is_demo)
