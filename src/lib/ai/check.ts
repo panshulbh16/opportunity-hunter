@@ -10,7 +10,7 @@ import { looksLikePdf } from "./resume.ts";
 import { classifyLinkStatus } from "../linkcheck.ts";
 import { onboardingWelcome } from "../welcome.ts";
 import { profileFromResume, SAMPLE_RESUME, sampleLandingMatch, scoreAgainstProfile } from "../landingMatch.ts";
-import { bestSimilarity, embeddingsEnabled, similarity, warmEmbeddings } from "./embeddings.ts";
+import { bestSimilarity, embeddingsEnabled, semanticRank, similarity, warmEmbeddings } from "./embeddings.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -175,6 +175,19 @@ if (!embeddingsEnabled) {
   const far = bestSimilarity(["Registered Nurse"], "React")!;
   assert.ok(near > far, `React↔Next.js (${near.toFixed(2)}) must beat React↔Nurse (${far.toFixed(2)})`);
   assert.ok(near >= 0.72, "related skills clear the SKILL_SIM threshold");
+}
+
+// Semantic search: on-topic listing ranks first with a key; offline it returns the list untouched
+// so the page can fall back to keyword filtering.
+const searchJobs = [
+  { opp: { title: "Senior Python Backend Engineer", description: "Django, PostgreSQL, REST APIs, AWS. Remote-friendly." } },
+  { opp: { title: "Registered Nurse — ICU", description: "Critical care, ACLS and BLS certified, patient monitoring." } },
+];
+if (!embeddingsEnabled) {
+  assert.equal((await semanticRank("python backend", searchJobs)).length, searchJobs.length, "no key ⇒ semanticRank returns items unchanged");
+} else {
+  const ranked = await semanticRank("remote python backend developer", searchJobs);
+  assert.equal(ranked[0]?.opp.title, "Senior Python Backend Engineer", "semantic search ranks the on-topic job first");
 }
 
 console.log("ai check ok —", opps.length, "opportunities, flagship score", b.score);
