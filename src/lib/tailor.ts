@@ -33,12 +33,15 @@ CHANGES:
 - <a specific edit you made to the résumé and why, in plain language>
 - <...>
 RESUME:
-<the candidate's résumé rewritten and reordered for THIS job, as clean ATS-friendly Markdown>
+<the candidate's résumé genuinely rewritten for THIS job, as clean ATS-friendly Markdown>
 
-Rules for the RESUME section:
-- Use ONLY facts present in the original résumé. Never invent employers, titles, dates, degrees, or skills.
-- Surface the genuinely relevant experience first; use the JD's real terminology where it truthfully applies.
-- If the candidate lacks something the JD needs, leave it out — that gap belongs in MISSING, not invented into the résumé.`;
+Rules for the RESUME section — this must be a real rewrite, never a copy of the original:
+- Rewrite the summary/objective (1–3 lines) to target this exact role, using the candidate's real background.
+- Reorder sections, jobs and bullet points so the most job-relevant material comes first.
+- Rephrase experience bullets to lead with the outcomes this JD cares about, and use the JD's own terminology WHERE IT TRUTHFULLY APPLIES (e.g. if the résumé says "REST services" and the JD says "APIs", you may say "APIs"). Keep any real numbers.
+- List the skills most relevant to this JD first.
+- Keep clean ATS-friendly Markdown: name/contact, a targeted summary, skills, experience with bullets, education.
+- NEVER invent employers, titles, dates, degrees, tools or skills. If the candidate genuinely lacks what the JD needs, leave it out — that belongs in MISSING. Even when the résumé already fits well, produce a visibly role-targeted version (sharper summary, reordered and rephrased bullets), not a verbatim copy.`;
 
 function client() {
   const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
@@ -76,8 +79,10 @@ export function parseTailorText(text: string): TailorResult {
   const seg = (i: number) => {
     if (at[i] < 0) return "";
     const start = at[i] + MARKS[i].length;
+    // End at the nearest following marker by POSITION, whatever its order — robust if the model
+    // emits sections out of order (otherwise one section can swallow another).
     let end = text.length;
-    for (let j = i + 1; j < MARKS.length; j++) if (at[j] >= 0) { end = at[j]; break; }
+    for (let j = 0; j < MARKS.length; j++) if (j !== i && at[j] > at[i] && at[j] < end) end = at[j];
     return text.slice(start, end).trim();
   };
   return {

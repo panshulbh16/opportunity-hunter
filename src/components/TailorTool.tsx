@@ -13,7 +13,7 @@ function parse(text: string) {
     if (at[i] < 0) return "";
     const start = at[i] + MARKS[i].length;
     let end = text.length;
-    for (let j = i + 1; j < MARKS.length; j++) if (at[j] >= 0) { end = at[j]; break; }
+    for (let j = 0; j < MARKS.length; j++) if (j !== i && at[j] > at[i] && at[j] < end) end = at[j];
     return text.slice(start, end).trim();
   };
   return {
