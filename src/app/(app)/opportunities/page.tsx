@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { getProfile, listOpportunities, listSaved, type Filters } from "@/lib/queries";
 import { calculateMatchScore } from "@/lib/ai";
 import { embeddingsEnabled, semanticRank, warmForScoring } from "@/lib/ai/embeddings";
+import { tasteScore, tasteVector } from "@/lib/ai/preference";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { OpportunityCard } from "@/components/OpportunityCard";
 import { PoolHealthBanner } from "@/components/PoolHealthBanner";
@@ -34,6 +35,16 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
     await warmForScoring(profile, unscored.map((it) => it.opp));
     for (const it of unscored) it.liveScore = calculateMatchScore(profile, it.opp).score;
   }
+  // Personalized re-rank: on the default "best" ordering, nudge listings toward what this user
+  // actually saves and applies to (and away from what they reject). Base score stays untouched.
+  const taste = !sp.status && !useSemantic && (!sp.sort || sp.sort === "best") ? tasteVector(user.id) : null;
+  if (taste) {
+    const base = (it: (typeof items)[number]) => it.match?.score ?? it.liveScore ?? 0;
+    items = items
+      .map((it) => ({ it, t: tasteScore(taste, it.opp) ?? 0 }))
+      .sort((a, b) => (base(b.it) + 18 * b.t) - (base(a.it) + 18 * a.t))
+      .map((x) => x.it);
+  }
   const active = Object.entries(sp).filter(([k, v]) => v && k !== "sort" && k !== "hidden" && k !== "status").length;
   const matched = items.filter((i) => i.match).length;
 
@@ -43,6 +54,12 @@ export default async function Opportunities({ searchParams }: { searchParams: Pr
         {sp.hidden && <span className="text-sm text-zinc-500">Hid {sp.hidden} similar {sp.hidden === "1" ? "opportunity" : "opportunities"}.</span>}
       </PageHeader>
       {!sp.status && <PoolHealthBanner audience="user" />}
+      {taste && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-4 py-2.5 text-[13px] text-indigo-900">
+          <span aria-hidden>✨</span>
+          <span><span className="font-semibold">Personalized ranking</span> — learned from {taste.liked} {taste.liked === 1 ? "job" : "jobs"} you saved or applied to{taste.passed ? ` and ${taste.passed} you passed on` : ""}. Sorted by match score, nudged toward your taste.</span>
+        </div>
+      )}
 
       <form className="card mb-6 p-4" method="get">
         {sp.status && <input type="hidden" name="status" value={sp.status} />}
