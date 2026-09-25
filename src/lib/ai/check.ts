@@ -10,7 +10,8 @@ import { looksLikePdf } from "./resume.ts";
 import { classifyLinkStatus } from "../linkcheck.ts";
 import { onboardingWelcome } from "../welcome.ts";
 import { profileFromResume, SAMPLE_RESUME, sampleLandingMatch, scoreAgainstProfile } from "../landingMatch.ts";
-import { bestSimilarity, embeddingsEnabled, semanticDedupe, semanticRank, similarity, warmEmbeddings } from "./embeddings.ts";
+import { bestSimilarity, docVec, embeddingsEnabled, semanticDedupe, semanticRank, similarity, warmEmbeddings } from "./embeddings.ts";
+import { tasteScore } from "./preference.ts";
 
 const profile: Profile = {
   roles: ["AI Engineer", "Machine Learning Engineer", "Python Developer"],
@@ -175,6 +176,17 @@ if (!embeddingsEnabled) {
   const far = bestSimilarity(["Registered Nurse"], "React")!;
   assert.ok(near > far, `React↔Next.js (${near.toFixed(2)}) must beat React↔Nurse (${far.toFixed(2)})`);
   assert.ok(near >= 0.72, "related skills clear the SKILL_SIM threshold");
+}
+
+// Preference re-ranking: a taste vector pointing at one job scores that job above an unrelated one.
+const jobA = { title: "Senior React Frontend Engineer", description: "Build web UIs in React and TypeScript with strong CSS and accessibility." };
+const jobB = { title: "Registered Nurse — ICU", description: "Critical care nursing, ACLS and BLS certified, patient monitoring." };
+if (!embeddingsEnabled) {
+  assert.equal(docVec(jobA), null, "no key ⇒ no listing vector, so personalisation stays off");
+} else {
+  await warmEmbeddings([`${jobA.title}. ${jobA.description}`, `${jobB.title}. ${jobB.description}`]);
+  const taste = { vec: docVec(jobA)!, liked: 3, passed: 0 }; // taste built toward job A
+  assert.ok((tasteScore(taste, jobA) ?? 0) > (tasteScore(taste, jobB) ?? 0), "taste toward A ranks A above unrelated B");
 }
 
 // Semantic search: on-topic listing ranks first with a key; offline it returns the list untouched

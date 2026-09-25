@@ -110,6 +110,9 @@ const SEARCH_SIM = 0.34;
 // Title + the head of the description: enough signal to rank relevance, small enough to embed fast.
 const docText = (o: { title: string; description: string }) => `${o.title}. ${o.description.slice(0, 400)}`;
 
+/** A listing's cached search vector (unit-normalized), or null if it hasn't been embedded. */
+export const docVec = (o: { title: string; description: string }) => getVec(docText(o));
+
 /**
  * Precompute the search vectors for a set of listings, once, so semantic search hits a warm cache
  * instead of embedding the whole pool during a page render. Called at ingest; no-op without a key.
