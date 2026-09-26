@@ -3,6 +3,9 @@ import { requestPasswordReset } from "@/app/actions";
 import { ActionForm } from "@/components/AuthForm";
 import { canEmailAnyone } from "@/lib/email";
 
+// Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: "Reset password" };
 
 export default function Forgot() {

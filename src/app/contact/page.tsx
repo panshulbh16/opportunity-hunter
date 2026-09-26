@@ -1,5 +1,8 @@
 import { LegalPage, supportEmail } from "@/components/LegalPage";
 
+// Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: "Contact" };
 
 export default function Contact() {

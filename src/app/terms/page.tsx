@@ -3,6 +3,9 @@ import { LegalPage } from "@/components/LegalPage";
 import { PLANS } from "@/lib/plans";
 import { PASS_DAYS } from "@/lib/razorpay";
 
+// Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: "Terms of Service" };
 
 export default function Terms() {

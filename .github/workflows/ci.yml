@@ -1,0 +1,48 @@
+name: Opportunity Hunter CI/CD
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # tsc, the AI matching check and the billing check
+      - run: npm run check
+      - run: npm run build
+
+  # Only after every check passes, and one deploy at a time.
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://opportunityhunter.xyz
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stamp the build with this commit
+        run: echo "${{ github.sha }}" > public/version.txt
+      - name: Deploy to Railway
+        run: npx -y @railway/cli@latest up --ci --service web --environment production
+      - name: Verify the new version is live and served fresh
+        run: bash scripts/verify-deploy.sh https://opportunityhunter.xyz ${{ github.sha }}
