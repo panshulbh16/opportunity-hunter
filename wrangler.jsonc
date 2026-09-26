@@ -1,0 +1,7 @@
+{
+  "name": "opportunity-hunter-delivery",
+  "main": "edge/worker.mjs",
+  "compatibility_date": "2026-09-26",
+  "workers_dev": false,
+  "routes": [{ "pattern": "opportunityhunter.xyz/*", "zone_name": "opportunityhunter.xyz" }]
+}

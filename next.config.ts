@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
+import fs from "node:fs";
+const release = process.env.APP_COMMIT_SHA ?? (fs.existsSync("release.json") ? JSON.parse(fs.readFileSync("release.json", "utf8")).commit : "unknown");
 const nextConfig: NextConfig = {
+  env: { APP_COMMIT_SHA: release },
   serverExternalPackages: ["better-sqlite3", "nodemailer"],
   outputFileTracingRoot: __dirname,
   // Resume import posts the PDF to a server action (5 MB cap, checked in importResume); the default is 1 MB.

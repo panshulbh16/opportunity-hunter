@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';
+const root=process.cwd();
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'oh-webhook-'));
+process.env.DATABASE_PATH=path.join(dir,'test.db');process.env.RAZORPAY_WEBHOOK_SECRET='isolated-test-secret';
+const {db}=await import(root+'/src/lib/db.ts');
+const {expireLapsedPasses,proUntil}=await import(root+'/src/lib/plans.ts');
+let source=fs.readFileSync(root+'/src/app/api/razorpay/webhook/route.ts','utf8').replace('"next/server"',JSON.stringify('file://'+root+'/node_modules/next/server.js')).replace('"@/lib/razorpay"',JSON.stringify('file://'+root+'/src/lib/razorpay.ts'));
+const {stripTypeScriptTypes}=await import('node:module');
+const {POST}=await import('data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source)).toString('base64'));
+const id=Number(db.prepare("INSERT INTO users(name,email) VALUES ('Test','webhook@example.invalid')").run().lastInsertRowid);
+db.prepare("INSERT INTO orders(id,user_id,amount) VALUES ('order_isolated',?,49900)").run(id);
+const plan=()=>db.prepare('SELECT subscription_plan FROM users WHERE id=?').get(id).subscription_plan;
+async function send(event,valid=true){const body=JSON.stringify(event);const signature=valid?crypto.createHmac('sha256',process.env.RAZORPAY_WEBHOOK_SECRET).update(body).digest('hex'):'0'.repeat(64);return POST(new Request('https://example.invalid/api/razorpay/webhook',{method:'POST',headers:{'x-razorpay-signature':signature},body}));}
+const paid={event:'order.paid',payload:{order:{entity:{id:'order_isolated'}},payment:{entity:{id:'pay_isolated'}}}};
+assert.equal((await send(paid,false)).status,401);assert.equal(plan(),'free');
+assert.equal((await send({...paid,event:'payment.failed'})).status,200);assert.equal(plan(),'free');
+assert.equal((await send(paid)).status,200);assert.equal(plan(),'pro');const until=proUntil(id);
+assert.equal((await send(paid)).status,200);assert.equal(proUntil(id),until);
+assert.equal((await send({...paid,event:'payment.failed'})).status,200);assert.equal(proUntil(id),until);
+db.prepare("UPDATE orders SET pro_until=datetime('now','-1 minute') WHERE id='order_isolated'").run();
+assert.equal(expireLapsedPasses(),1);assert.equal(plan(),'free');
+assert.equal((await send(paid)).status,200);assert.equal(plan(),'free');
+console.log('PASS: invalid signature, failed payment, webhook-only activation, duplicate paid event, late failure, expiry, replay after expiry');
+db.close();fs.rmSync(dir,{recursive:true});
