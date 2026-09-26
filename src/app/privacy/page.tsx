@@ -2,6 +2,9 @@ import Link from "next/link";
 import { LegalPage } from "@/components/LegalPage";
 import { CookieSettingsButton } from "@/components/Analytics";
 
+// Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: "Privacy Policy" };
 
 export default function Privacy() {

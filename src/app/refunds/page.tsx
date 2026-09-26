@@ -2,6 +2,9 @@ import Link from "next/link";
 import { LegalPage } from "@/components/LegalPage";
 import { PASS_DAYS } from "@/lib/razorpay";
 
+// Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
+export const dynamic = "force-dynamic";
+
 export const metadata = { title: "Cancellation & Refund Policy" };
 
 const REFUND_WINDOW_DAYS = 7;
