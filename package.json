@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/stamp-version.mjs",
     "build": "next build",
     "start": "next start",
     "check": "tsc --noEmit && node --experimental-strip-types src/lib/ai/check.ts && node --experimental-strip-types src/lib/billing-check.ts"
