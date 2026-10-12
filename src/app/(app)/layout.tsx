@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { unreadCount } from "@/lib/queries";
 import { logout } from "@/app/actions";
 import { Logo } from "@/components/ui";
+
+// Personal, signed-in pages: never indexed (robots.ts also disallows them).
+export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 const NAV = [["/dashboard", "Dashboard"], ["/opportunities", "Opportunities"], ["/tailor", "Tailor Résumé"], ["/applications", "Applications"], ["/alerts", "Alerts"], ["/profile", "Search Profile"], ["/settings", "Settings"]];
 

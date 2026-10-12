@@ -2,15 +2,18 @@ import Link from "next/link";
 import { LegalPage } from "@/components/LegalPage";
 import { PLANS } from "@/lib/plans";
 import { PASS_DAYS } from "@/lib/razorpay";
+import { pageMetadata } from "@/lib/site";
 
 // Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Terms of Service" };
+const DESCRIPTION = `The terms for using Opportunity Hunter: what the job-matching service does and doesn't promise, your account, the ${PASS_DAYS}-day Pro pass, payments and liability.`;
+
+export const metadata = pageMetadata("/terms", DESCRIPTION);
 
 export default function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="19 September 2026">
+    <LegalPage path="/terms" description={DESCRIPTION}>
       <p>These terms cover your use of Opportunity Hunter, a job-discovery service run by Panshul Bharadwaj, an individual developer based in India. By creating an account you agree to them.</p>
 
       <h2>The service</h2>

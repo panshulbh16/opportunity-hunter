@@ -1,15 +1,18 @@
 import Link from "next/link";
 import { LegalPage } from "@/components/LegalPage";
 import { CookieSettingsButton } from "@/components/Analytics";
+import { pageMetadata } from "@/lib/site";
 
 // Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Privacy Policy" };
+const DESCRIPTION = "What Opportunity Hunter collects and why, who else handles it, which cookies it sets, how long data is kept, and how to delete your account at any time.";
+
+export const metadata = pageMetadata("/privacy", DESCRIPTION);
 
 export default function Privacy() {
   return (
-    <LegalPage title="Privacy Policy" updated="26 September 2026">
+    <LegalPage path="/privacy" description={DESCRIPTION}>
       <p>Opportunity Hunter is free to use, with an optional paid Pro plan. This page explains, in plain language, what we collect and why.</p>
 
       <h2>What we collect</h2>

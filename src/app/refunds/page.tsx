@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { LegalPage } from "@/components/LegalPage";
 import { PASS_DAYS } from "@/lib/razorpay";
+import { pageMetadata } from "@/lib/site";
 
 // Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Cancellation & Refund Policy" };
-
 const REFUND_WINDOW_DAYS = 7;
+
+const DESCRIPTION = `Opportunity Hunter Pro is a one-time ${PASS_DAYS}-day pass that never renews on its own. Ask for a full refund within ${REFUND_WINDOW_DAYS} days of buying it. Here's how refunds work.`;
+
+export const metadata = pageMetadata("/refunds", DESCRIPTION);
 
 export default function Refunds() {
   return (
-    <LegalPage title="Cancellation & Refund Policy" updated="19 September 2026">
+    <LegalPage path="/refunds" description={DESCRIPTION}>
       <h2>Cancellation</h2>
       <p>There&apos;s nothing to cancel. Pro is a one-time {PASS_DAYS}-day pass, not a subscription: we never charge you again unless you choose to buy another pass. When it ends, your account returns to Free and keeps all your data.</p>
 
