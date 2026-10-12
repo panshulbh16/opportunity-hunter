@@ -1,14 +1,17 @@
 import { LegalPage, supportEmail } from "@/components/LegalPage";
+import { pageMetadata } from "@/lib/site";
 
 // Rendered per request so a deploy is visible immediately (no year-long s-maxage on prebuilt HTML).
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Contact" };
+const DESCRIPTION = "How to contact Opportunity Hunter about support, payment problems or data requests. The service is run by Panshul Bharadwaj, an independent developer in India.";
+
+export const metadata = pageMetadata("/contact", DESCRIPTION);
 
 export default function Contact() {
   const email = supportEmail();
   return (
-    <LegalPage title="Contact" updated="19 September 2026">
+    <LegalPage path="/contact" description={DESCRIPTION}>
       <p>Opportunity Hunter is run by Panshul Bharadwaj, an individual developer based in India.</p>
 
       <h2>Email</h2>

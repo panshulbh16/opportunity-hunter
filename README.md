@@ -116,6 +116,16 @@ double-hunt and halve the rate limits. To scale out, disable the in-process sche
 The demo account is not created in production unless `SEED_DEMO=true`; its password is published in this
 repo, so treat any instance that enables it as public.
 
+## Search engines
+
+Public pages (`/`, `/pricing`, `/terms`, `/privacy`, `/refunds`, `/contact`) are listed in `src/lib/site.ts` with their
+last-modified dates; that list feeds `/sitemap.xml`, canonical URLs and the structured data. Each public page passes its own
+description to `pageMetadata()`. Login, sign-up, password resets, onboarding and everything behind login send `noindex`,
+and `/robots.txt` (`src/app/robots.ts`) disallows them and `/api/`. `htmlLimitedBots` in `next.config.ts` makes Next put the
+title, description and canonical in `<head>` for every user agent instead of streaming them into `<body>`. When you add a
+public page, add it to `PUBLIC_PAGES` and link it from `SiteFooter`; when you change a public page's text, bump its
+`lastModified`. To verify the site in Google Search Console with an HTML tag, set `GOOGLE_SITE_VERIFICATION`.
+
 ## Future categories
 
 `opportunities.category` and `search_profiles.category` default to `job`. The agent, scoring and UI are category-agnostic apart from job-specific fields, so freelance/scholarship/grant sources can be added as new adapters later.

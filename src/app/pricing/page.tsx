@@ -4,8 +4,14 @@ import { getUser } from "@/lib/auth";
 import { billingCurrency, internationalEnabled, PLANS, paymentsConfigured, proPrice } from "@/lib/plans";
 import { Check, Logo } from "@/components/ui";
 import { UpgradeButton } from "@/components/UpgradeButton";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { JsonLd } from "@/components/JsonLd";
+import { SiteFooter } from "@/components/SiteFooter";
+import { PUBLIC_PAGES, pageMetadata, subpageLd } from "@/lib/site";
 
-export const metadata = { title: "Pricing" };
+const DESCRIPTION = `Opportunity Hunter pricing: Free gives you ${PLANS.free.weeklyDiscoveries} new job matches a week, basic matching and an application tracker. Pro adds unlimited matches and a daily digest.`;
+
+export const metadata = pageMetadata("/pricing", DESCRIPTION);
 
 export default async function Pricing() {
   const user = await getUser();
@@ -15,12 +21,13 @@ export default async function Pricing() {
       <header className="border-b border-zinc-100">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/"><Logo /></Link>
-          <nav className="flex items-center gap-1 text-sm">
+          <nav aria-label="Main" className="flex items-center gap-1 text-sm">
             {user ? <Link href="/dashboard" className="btn-ghost">Dashboard</Link> : <Link href="/login" className="btn-ghost">Log in</Link>}
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl px-6 py-20">
+      <div className="mx-auto max-w-4xl px-6 pt-8"><Breadcrumbs current={PUBLIC_PAGES["/pricing"].name} /></div>
+      <main className="mx-auto max-w-4xl px-6 pb-20 pt-12">
         <div className="text-center">
           <h1 className="text-4xl font-semibold tracking-tight text-zinc-900">Simple pricing</h1>
           <p className="mt-3 text-zinc-600">{paymentsConfigured ? "Start free. Go Pro when you want unlimited matches and daily digests." : "Free while we're in early access. Pro, for unlimited matches and daily digests, is coming soon."}</p>
@@ -51,6 +58,8 @@ export default async function Pricing() {
         </div>
         <p className="mt-10 text-center text-xs text-zinc-400">{paymentsConfigured ? "Pro is a 30-day pass paid once via Razorpay. It never renews on its own, so you're never charged by surprise." + (internationalEnabled() ? " ₹499 in India, $10 elsewhere." : " Prices in INR.") : "Prices in INR. Pro isn't available to buy yet — nobody will be charged."}{" "}<Link href="/refunds" className="underline hover:text-zinc-700">Refund policy</Link></p>
       </main>
+      <SiteFooter />
+      <JsonLd data={subpageLd("/pricing", DESCRIPTION)} />
     </div>
   );
 }

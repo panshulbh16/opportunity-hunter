@@ -5,9 +5,14 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
   // Resume import posts the PDF to a server action (5 MB cap, checked in importResume); the default is 1 MB.
   experimental: { serverActions: { bodySizeLimit: "6mb" } },
+  // Render <title>, description and canonical inside <head> for every visitor, crawlers included.
+  // Next 15.5 otherwise streams them into <body> for most user agents; ours resolve instantly, so nothing is lost.
+  htmlLimitedBots: /.*/,
   // Baseline hardening for a public site accepting logins. HSTS is left to Railway's TLS proxy.
   async headers() {
     return [
+      // API responses (JSON, OAuth redirects) can't carry a robots meta tag.
+      { source: "/api/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
       {
         source: "/:path*",
         headers: [
@@ -20,6 +25,11 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
+  },
+  // One canonical host. A Cloudflare redirect rule (which also covers http://www) is better; this is the fallback
+  // so www never serves a duplicate copy of the site.
+  async redirects() {
+    return [{ source: "/:path*", has: [{ type: "host", value: "www\\.opportunityhunter\\.xyz" }], destination: "https://opportunityhunter.xyz/:path*", permanent: true }];
   },
 };
 

@@ -4,7 +4,7 @@ import { Logo } from "@/components/ui";
 import { resumeImportConfigured } from "@/lib/ai/resume";
 import { EMPTY_PROFILE, ProfileForm } from "@/components/ProfileForm";
 
-export const metadata = { title: "Set up your search" };
+export const metadata = { title: "Set up your search", robots: { index: false, follow: false } };
 
 export default async function Onboarding() {
   const user = await getUser();
